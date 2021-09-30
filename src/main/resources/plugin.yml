@@ -4,3 +4,10 @@ main: yaya.dungeons.YayDungeons
 api-version: 1.17
 authors: [ Absolutelyaya ]
 website: https://www.curseforge.com/members/absolutelyaya/projects
+depend: [ WorldEdit ]
+commands:
+  dungen:
+    description: Debug command for generating a new dungeon
+  leave:
+    description: Leave a dungeon
+#permissions:

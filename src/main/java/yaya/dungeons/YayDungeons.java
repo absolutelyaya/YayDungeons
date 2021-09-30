@@ -1,20 +1,45 @@
 package yaya.dungeons;
 
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
+import yaya.dungeons.dungeons.DungeonManager;
 
 public final class YayDungeons extends JavaPlugin
 {
-	
 	@Override
 	public void onEnable()
 	{
-		// Plugin startup logic
-		
+		registerCommands();
 	}
 	
 	@Override
 	public void onDisable()
 	{
-		// Plugin shutdown logic
+		DungeonManager.removeAllDungeons();
+	}
+	
+	public void registerCommands()
+	{
+		getCommand("dungen").setExecutor(this);
+		getCommand("leave").setExecutor(this);
+	}
+	
+	@Override
+	public boolean onCommand(CommandSender sender, Command command, String label, String[] args)
+	{
+		Player p = (Player)sender;
+		switch(command.getName())
+		{
+			case "dungen":
+				DungeonManager.enterDungeon(p, DungeonManager.newDungeon());
+				return true;
+			case "leave":
+				DungeonManager.leaveDungeon(p);
+				return true;
+				
+		}
+		return false;
 	}
 }
