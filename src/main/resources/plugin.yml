@@ -1,0 +1,6 @@
+name: YayDungeons
+version: '${project.version}'
+main: yaya.dungeons.YayDungeons
+api-version: 1.17
+authors: [ Absolutelyaya ]
+website: https://www.curseforge.com/members/absolutelyaya/projects
