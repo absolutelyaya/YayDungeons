@@ -8,9 +8,22 @@ import yaya.dungeons.dungeons.DungeonManager;
 
 public final class YayDungeons extends JavaPlugin
 {
+	public static YayDungeons instance;
+	
 	@Override
 	public void onEnable()
 	{
+		instance = this;
+		
+		try
+		{
+			getClass().getClassLoader().loadClass("yaya.dungeons.dungeons.DungeonManager");
+		}
+		catch (ClassNotFoundException e)
+		{
+			e.printStackTrace();
+		}
+		
 		registerCommands();
 	}
 	
@@ -38,7 +51,6 @@ public final class YayDungeons extends JavaPlugin
 			case "leave":
 				DungeonManager.leaveDungeon(p);
 				return true;
-				
 		}
 		return false;
 	}
