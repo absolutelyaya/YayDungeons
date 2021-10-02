@@ -17,10 +17,7 @@ import org.bukkit.entity.Player;
 import yaya.dungeons.YayDungeons;
 
 import java.io.*;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.UUID;
+import java.util.*;
 import java.util.logging.Logger;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
@@ -32,10 +29,11 @@ public class Dungeon
 	private final UUID id;
 	private final int sizeX;
 	private final int sizeY;
+	private final List<Player> players = new ArrayList<>();
+	private final List<Player> spectators = new ArrayList<>();
+	private final HashMap<Player, Dungeoneer> savedDungeoneers = new HashMap<>();
 	
-	World world;
-	List<Player> players = new ArrayList<>();
-	List<Player> spectators = new ArrayList<>();
+	private World world;
 	
 	public Dungeon(UUID id, int sizeX, int sizeY)
 	{
@@ -64,6 +62,11 @@ public class Dungeon
 			Bukkit.broadcastMessage("Something went wrong during Dungeon generation. Error Code " + error);
 			world.getBlockAt(0, 63, 0).setType(Material.GLASS);
 		}
+	}
+	
+	public void SaveDungeoneer(Player p, Dungeoneer d)
+	{
+		savedDungeoneers.put(p, d);
 	}
 	
 	short placeRoom(String room, BlockVector3 pos, double rot, boolean includeEntities)
@@ -152,6 +155,11 @@ public class Dungeon
 	public World getWorld()
 	{
 		return world;
+	}
+	
+	public HashMap<Player, Dungeoneer> getSavedDungeoneers()
+	{
+		return savedDungeoneers;
 	}
 	
 	public static void deleteRecursively(File directory)

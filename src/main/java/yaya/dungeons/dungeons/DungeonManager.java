@@ -10,7 +10,7 @@ import java.util.UUID;
 public class DungeonManager
 {
 	static HashMap<UUID, Dungeon> Dungeons = new HashMap<>();
-	static HashMap<Player, UUID> Dungeoneers = new HashMap<>();
+	static HashMap<Player, Dungeoneer> Dungeoneers = new HashMap<>();
 	
 	public static UUID newDungeon()
 	{
@@ -41,12 +41,26 @@ public class DungeonManager
 		Dungeons.clear();
 	}
 	
-	public static void enterDungeon(Player p, UUID dungeon)
+	public static void enterDungeon(Player p, UUID id)
 	{
-		if(Dungeons.containsKey(dungeon))
+		if(Dungeoneers.containsKey(p))
 		{
-			Dungeons.get(dungeon).Enter(p);
-			Dungeoneers.put(p, dungeon);
+			leaveDungeon(p);
+		}
+		if(Dungeons.containsKey(id))
+		{
+			Dungeon dungeon = Dungeons.get(id);
+			dungeon.Enter(p);
+			if(dungeon.getSavedDungeoneers().containsKey(p))
+			{
+				Dungeoneer d;
+				Dungeoneers.put(p, (d = dungeon.getSavedDungeoneers().get(p)));
+				d.setCurrentDungeon(id);
+				d.loadDungeonInventory(p);
+			}
+			else
+				Dungeoneers.put(p, new Dungeoneer(id, p));
+			p.getInventory().clear();
 		}
 	}
 	
@@ -54,7 +68,12 @@ public class DungeonManager
 	{
 		if(Dungeoneers.containsKey(p))
 		{
-			Dungeons.get(Dungeoneers.get(p)).Leave(p);
+			Dungeon dungeon = Dungeons.get(Dungeoneers.get(p).getCurrentDungeon());
+			dungeon.Leave(p);
+			Dungeoneer d;
+			dungeon.SaveDungeoneer(p, d = Dungeoneers.get(p));
+			d.loadOutsideInventory(p);
+			Dungeoneers.remove(p);
 			p.sendMessage(ChatColor.GRAY + "You left the Dungeon.");
 		}
 		else
