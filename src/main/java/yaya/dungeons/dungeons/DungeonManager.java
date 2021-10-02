@@ -12,10 +12,10 @@ public class DungeonManager
 	static HashMap<UUID, Dungeon> Dungeons = new HashMap<>();
 	static HashMap<Player, Dungeoneer> Dungeoneers = new HashMap<>();
 	
-	public static UUID newDungeon()
+	public static UUID newDungeon(int sizeX, int sizeY, int seed)
 	{
 		UUID id = UUID.randomUUID();
-		Dungeon d = new Dungeon(id, 16, 16);
+		Dungeon d = new Dungeon(id, sizeX, sizeY, seed);
 		Dungeons.put(id, d);
 		return id;
 	}

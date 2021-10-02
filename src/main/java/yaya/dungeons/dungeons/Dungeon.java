@@ -1,5 +1,6 @@
 package yaya.dungeons.dungeons;
 
+import com.sk89q.jchronic.utils.Range;
 import com.sk89q.worldedit.EditSession;
 import com.sk89q.worldedit.WorldEdit;
 import com.sk89q.worldedit.WorldEditException;
@@ -13,6 +14,7 @@ import com.sk89q.worldedit.math.BlockVector3;
 import com.sk89q.worldedit.math.transform.AffineTransform;
 import com.sk89q.worldedit.session.ClipboardHolder;
 import org.bukkit.*;
+import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import yaya.dungeons.YayDungeons;
 
@@ -32,16 +34,24 @@ public class Dungeon
 	private final List<Player> players = new ArrayList<>();
 	private final List<Player> spectators = new ArrayList<>();
 	private final HashMap<Player, Dungeoneer> savedDungeoneers = new HashMap<>();
+	private final Random random;
+	private final int seed;
+	private final Type type;
 	
 	private World world;
 	
-	public Dungeon(UUID id, int sizeX, int sizeY)
+	public Dungeon(UUID id, int sizeX, int sizeY, int seed)
 	{
 		if(logger == null)
 			logger = YayDungeons.instance.getLogger();
 		this.id = id;
 		this.sizeX = sizeX;
 		this.sizeY = sizeY;
+		this.seed = seed;
+		random = new Random(seed);
+		//type = Type.values()[random.nextInt(Type.values().length)];
+		type = Type.Nature; //I just want to get one type working for now.
+		logger.info(String.valueOf(type));
 		generate();
 	}
 	
@@ -51,7 +61,7 @@ public class Dungeon
 		WorldCreator wc = new WorldCreator("Dungeon-" + id.toString());
 		wc.type(WorldType.FLAT);
 		wc.generatorSettings("{\"structures\": {\"structures\": {\"village\": {\"salt\": 8015723, \"spacing\": 32, \"separation\": 8}}}, " +
-									 "\"layers\": [{\"block\": \"air\", \"height\": 1}], \"biome\": \"the_void\"}");
+									 "\"layers\": [{\"block\": \"air\", \"height\": 1}], \"biome\": \"" + type.biome + "\"}");
 		wc.generateStructures(false);
 		world = wc.createWorld();
 		int error;
@@ -61,6 +71,16 @@ public class Dungeon
 		{
 			Bukkit.broadcastMessage("Something went wrong during Dungeon generation. Error Code " + error);
 			world.getBlockAt(0, 63, 0).setType(Material.GLASS);
+		}
+		world.setFullTime(random.nextInt((int)(type.time.getEnd() + 1 - type.time.getBegin())) + type.time.getBegin());
+		world.setStorm(type.storm);
+		world.setThundering(type.thunder);
+		world.setGameRule(GameRule.DO_DAYLIGHT_CYCLE, false);
+		world.setGameRule(GameRule.DO_WEATHER_CYCLE, false);
+		world.setGameRule(GameRule.DO_MOB_SPAWNING, false);
+		for(Item i : world.getEntitiesByClass(Item.class))
+		{
+			i.remove();
 		}
 	}
 	
@@ -138,6 +158,7 @@ public class Dungeon
 		players.add(p);
 		p.teleport(new Location(world, 0.5, 64, 0.5));
 		p.sendMessage(ChatColor.GRAY + "You entered the Dungeon.");
+		p.sendMessage(ChatColor.GRAY + "Seed: " + seed);
 	}
 	
 	public void Leave(Player p)
@@ -175,5 +196,27 @@ public class Dungeon
 			}
 		}
 		directory.delete();
+	}
+	
+	public enum Type
+	{
+		Nature("forest", new Range(0, 24000), false, false),
+		Desert("desert", new Range(0, 24000), false, false),
+		Castle("the_void", new Range(18000, 18000), false, false),
+		Ashen("basalt_deltas", new Range(0, 24000), true, false),
+		Demonic("crimson_forest", new Range(18000, 18000), true, false),
+		Mansion("dark_forest", new Range(12500, 23500), true, true);
+		
+		public String biome;
+		public Range time;
+		public boolean storm;
+		public boolean thunder;
+		Type(String biome, Range time, boolean storm, boolean thunder)
+		{
+			this.biome = biome;
+			this.time = time;
+			this.storm = storm;
+			this.thunder = thunder;
+		}
 	}
 }
