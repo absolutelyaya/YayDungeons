@@ -5,6 +5,9 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import yaya.dungeons.dungeons.DungeonManager;
+import yaya.dungeons.listeners.PortalListener;
+
+import java.util.Objects;
 
 public final class YayDungeons extends JavaPlugin
 {
@@ -24,6 +27,7 @@ public final class YayDungeons extends JavaPlugin
 			e.printStackTrace();
 		}
 		
+		registerListeners();
 		registerCommands();
 	}
 	
@@ -33,10 +37,15 @@ public final class YayDungeons extends JavaPlugin
 		DungeonManager.removeAllDungeons();
 	}
 	
+	public void registerListeners()
+	{
+		getServer().getPluginManager().registerEvents(new PortalListener(), this);
+	}
+	
 	public void registerCommands()
 	{
-		getCommand("dungen").setExecutor(this);
-		getCommand("leave").setExecutor(this);
+		Objects.requireNonNull(getCommand("dungen")).setExecutor(this);
+		Objects.requireNonNull(getCommand("leave")).setExecutor(this);
 	}
 	
 	@Override

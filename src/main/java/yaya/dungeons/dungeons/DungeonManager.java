@@ -1,6 +1,7 @@
 package yaya.dungeons.dungeons;
 
 import org.bukkit.ChatColor;
+import org.bukkit.World;
 import org.bukkit.entity.Player;
 
 import java.util.HashMap;
@@ -19,13 +20,25 @@ public class DungeonManager
 		return id;
 	}
 	
+	public static boolean isWorldDungeon(World world)
+	{
+		for (UUID id : Dungeons.keySet())
+		{
+			if((Dungeons.get(id)).getWorld().equals(world))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+	
 	public static void removeAllDungeons()
 	{
 		for (UUID id : Dungeons.keySet())
 		{
 			removeDungeon(id);
-			Dungeons.remove(id);
 		}
+		Dungeons.clear();
 	}
 	
 	public static void enterDungeon(Player p, UUID dungeon)

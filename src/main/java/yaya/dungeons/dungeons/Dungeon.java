@@ -10,23 +10,28 @@ import com.sk89q.worldedit.extent.clipboard.io.ClipboardReader;
 import com.sk89q.worldedit.function.operation.Operation;
 import com.sk89q.worldedit.function.operation.Operations;
 import com.sk89q.worldedit.math.BlockVector3;
+import com.sk89q.worldedit.math.transform.AffineTransform;
 import com.sk89q.worldedit.session.ClipboardHolder;
 import org.bukkit.*;
 import org.bukkit.entity.Player;
+import yaya.dungeons.YayDungeons;
 
 import java.io.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.logging.Logger;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
 public class Dungeon
 {
-	private UUID id;
-	private int sizeX;
-	private int sizeY;
+	static Logger logger = null;
+	
+	private final UUID id;
+	private final int sizeX;
+	private final int sizeY;
 	
 	World world;
 	List<Player> players = new ArrayList<>();
@@ -34,6 +39,8 @@ public class Dungeon
 	
 	public Dungeon(UUID id, int sizeX, int sizeY)
 	{
+		if(logger == null)
+			logger = YayDungeons.instance.getLogger();
 		this.id = id;
 		this.sizeX = sizeX;
 		this.sizeY = sizeY;
@@ -49,25 +56,28 @@ public class Dungeon
 									 "\"layers\": [{\"block\": \"air\", \"height\": 1}], \"biome\": \"the_void\"}");
 		wc.generateStructures(false);
 		world = wc.createWorld();
-		if(placeRoom("Rooms/NatureEntrance.schem", BlockVector3.at(0,63,0)))
+		int error;
+		if((error = placeRoom("Rooms/NatureEntrance.schem", BlockVector3.at(0,63,0), 0, false)) == 0)
 			Bukkit.broadcastMessage("Dungeon Generation Complete!");
 		else
 		{
-			Bukkit.broadcastMessage("Something went wrong during Dungeon generation.");
+			Bukkit.broadcastMessage("Something went wrong during Dungeon generation. Error Code " + error);
 			world.getBlockAt(0, 63, 0).setType(Material.GLASS);
 		}
 	}
 	
-	boolean placeRoom(String room, BlockVector3 pos)
+	short placeRoom(String room, BlockVector3 pos, double rot, boolean includeEntities)
 	{
 		Clipboard c;
-		GZIPInputStream zipStream = null;
+		GZIPInputStream zipStream;
 		try
 		{
 			File tmp = File.createTempFile("tmp", "schem");
 			GZIPOutputStream zipOut = new GZIPOutputStream(new FileOutputStream(tmp));
 			InputStream inStream = getClass().getClassLoader().getResourceAsStream(room);
 			int b;
+			if(inStream == null)
+				return 1;
 			while((b = inStream.read()) != -1)
 			{
 				zipOut.write((byte)b);
@@ -80,7 +90,7 @@ public class Dungeon
 		catch (IOException e)
 		{
 			e.printStackTrace();
-			return false;
+			return 2;
 		}
 		try (ClipboardReader reader = BuiltInClipboardFormat.SPONGE_SCHEMATIC.getReader(zipStream))
 		{
@@ -89,19 +99,21 @@ public class Dungeon
 		catch(IOException e)
 		{
 			e.printStackTrace();
-			return false;
+			return 3;
 		}
 		try (EditSession session = WorldEdit.getInstance().newEditSession(BukkitAdapter.adapt(world)))
 		{
-			Operation op = new ClipboardHolder(c).createPaste(session).ignoreAirBlocks(true).to(pos).build();
+			ClipboardHolder ch = new ClipboardHolder(c);
+			ch.setTransform(new AffineTransform().rotateY(rot));
+			Operation op = ch.createPaste(session).ignoreAirBlocks(true).copyEntities(includeEntities).to(pos).build();
 			Operations.complete(op);
 		}
 		catch (WorldEditException e)
 		{
 			e.printStackTrace();
-			return false;
+			return 4;
 		}
-		return true;
+		return 0;
 	}
 	
 	public void CloseDungeon()
@@ -114,6 +126,7 @@ public class Dungeon
 			p.sendMessage(ChatColor.RED + "The Dungeon instance you were in was closed.");
 		}
 		Bukkit.unloadWorld(world, false);
+		world.setAutoSave(false);
 		deleteRecursively(world.getWorldFolder());
 	}
 	
