@@ -78,6 +78,9 @@ public class Dungeon
 		world.setGameRule(GameRule.DO_DAYLIGHT_CYCLE, false);
 		world.setGameRule(GameRule.DO_WEATHER_CYCLE, false);
 		world.setGameRule(GameRule.DO_MOB_SPAWNING, false);
+		world.setGameRule(GameRule.KEEP_INVENTORY, true);
+		world.setGameRule(GameRule.SPAWN_RADIUS, 0);
+		world.setSpawnLocation(new Location(world, 1, 63, 0));
 		for(Item i : world.getEntitiesByClass(Item.class))
 		{
 			i.remove();
@@ -156,7 +159,7 @@ public class Dungeon
 	public void Enter(Player p)
 	{
 		players.add(p);
-		p.teleport(new Location(world, 0.5, 64, 0.5));
+		p.teleport(world.getSpawnLocation());
 		p.sendMessage(ChatColor.GRAY + "You entered the Dungeon.");
 		p.sendMessage(ChatColor.GRAY + "Seed: " + seed);
 	}
@@ -185,17 +188,20 @@ public class Dungeon
 	
 	public static void deleteRecursively(File directory)
 	{
-		for (File file : Objects.requireNonNull(directory.listFiles()))
+		if(directory.exists() && directory.listFiles() != null)
 		{
-			if (file.isDirectory())
+			for (File file : Objects.requireNonNull(directory.listFiles()))
 			{
-				deleteRecursively(file);
-			} else
-			{
-				file.delete();
+				if (file.isDirectory())
+				{
+					deleteRecursively(file);
+				} else
+				{
+					file.delete();
+				}
 			}
+			directory.delete();
 		}
-		directory.delete();
 	}
 	
 	public enum Type

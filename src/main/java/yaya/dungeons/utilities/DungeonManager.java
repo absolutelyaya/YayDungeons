@@ -1,8 +1,12 @@
-package yaya.dungeons.dungeons;
+package yaya.dungeons.utilities;
 
 import org.bukkit.ChatColor;
+import org.bukkit.GameMode;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
+import yaya.dungeons.dungeons.Dungeon;
+import yaya.dungeons.dungeons.Dungeoneer;
+import yaya.dungeons.menus.ClassSelectionMenu;
 
 import java.util.HashMap;
 import java.util.UUID;
@@ -59,7 +63,11 @@ public class DungeonManager
 				d.loadDungeonInventory(p);
 			}
 			else
+			{
 				Dungeoneers.put(p, new Dungeoneer(id, p));
+				new ClassSelectionMenu(p, p).open();
+			}
+			p.setGameMode(GameMode.ADVENTURE);
 			p.getInventory().clear();
 		}
 	}
@@ -74,10 +82,16 @@ public class DungeonManager
 			dungeon.SaveDungeoneer(p, d = Dungeoneers.get(p));
 			d.loadOutsideInventory(p);
 			Dungeoneers.remove(p);
+			p.setGameMode(GameMode.SURVIVAL);
 			p.sendMessage(ChatColor.GRAY + "You left the Dungeon.");
 		}
 		else
 			p.sendMessage(ChatColor.RED + "You aren't in any Dungeon.");
+	}
+	
+	public static Dungeoneer getDungeoneer(Player p)
+	{
+		return Dungeoneers.get(p);
 	}
 	
 	public static void removeDungeon(UUID id)

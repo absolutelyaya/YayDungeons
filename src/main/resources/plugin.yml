@@ -10,4 +10,6 @@ commands:
     description: Debug command for generating a new dungeon
   leave:
     description: Leave a dungeon
+  class:
+    description: nothing for now
 #permissions:
