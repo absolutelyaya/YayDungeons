@@ -43,11 +43,7 @@ public class SpectatorMenu extends Menu
 		else if(slot < players.size())
 		{
 			Player target = players.get(slot);
-			if(target != owner)
-			{
-				owner.setGameMode(GameMode.SPECTATOR);
-				dungeon.Spectate(owner, target);
-			}
+			dungeon.Spectate(owner, target);
 		}
 		e.setCancelled(true);
 		owner.closeInventory(InventoryCloseEvent.Reason.PLUGIN);

@@ -13,10 +13,18 @@ import com.sk89q.worldedit.function.operation.Operations;
 import com.sk89q.worldedit.math.BlockVector3;
 import com.sk89q.worldedit.math.transform.AffineTransform;
 import com.sk89q.worldedit.session.ClipboardHolder;
+import net.kyori.adventure.bossbar.BossBar;
+import net.kyori.adventure.bossbar.BossBar.Color;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.Style;
+import net.kyori.adventure.text.format.TextColor;
+import net.kyori.adventure.text.format.TextDecoration;
+import net.kyori.adventure.title.TitlePart;
 import org.bukkit.*;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
+import org.bukkit.event.player.PlayerTeleportEvent;
+import org.bukkit.scheduler.BukkitRunnable;
 import yaya.dungeons.YayDungeons;
 
 import java.io.*;
@@ -37,8 +45,13 @@ public class Dungeon
 	private final Random random;
 	private final int seed;
 	private final Type type;
+	private final List<Modifier> mods = new ArrayList<>();
 	
 	private World world;
+	private BossBar bossBar;
+	private int lifetime = -1;
+	private int unstableCountdownID = -1;
+	private boolean collapsed;
 	
 	public Dungeon(UUID id, int sizeX, int sizeY, int seed)
 	{
@@ -49,9 +62,9 @@ public class Dungeon
 		this.sizeY = sizeY;
 		this.seed = seed;
 		random = new Random(seed);
-		type = Type.values()[random.nextInt(Type.values().length)];
-		//type = Type.Test; //I just want to get one type working for now.
-		logger.info(String.valueOf(type));
+		//type = Type.values()[random.nextInt(Type.values().length)];
+		type = Type.Test; //I just want to get one type working for now.
+		logger.info("created dungeon of type " + type);
 		generate();
 	}
 	public Dungeon(UUID id, int sizeX, int sizeY, int seed, Type type)
@@ -70,9 +83,11 @@ public class Dungeon
 	
 	void generate()
 	{
-		logger.info("starting generation of Dungeon " + id);
+		logger.info("Starting generation of Dungeon " + id);
 		Bukkit.broadcast(Component.text("Generating a dungeon..."));
-		WorldCreator wc = new WorldCreator("Dungeon-" + type.name() + "." + id.toString());
+		String name;
+		WorldCreator wc = new WorldCreator(name = "Dungeon-" + type.name() + "." + id.toString());
+		bossBar = BossBar.bossBar(Component.text(name), 1f, BossBar.Color.WHITE, BossBar.Overlay.PROGRESS);
 		wc.type(WorldType.FLAT);
 		wc.generatorSettings("{\"structures\": {\"structures\": {\"village\": {\"salt\": 8015723, \"spacing\": 32, \"separation\": 8}}}, " +
 									 "\"layers\": [{\"block\": \"air\", \"height\": 1}], \"biome\": \"" + type.biome + "\"}");
@@ -84,6 +99,7 @@ public class Dungeon
 		else
 		{
 			Bukkit.broadcast(Component.text("Something went wrong during Dungeon generation. Error Code " + error));
+			logger.warning("Generation of Dungeon " + id + " failed! Error code: " + error);
 			world.getBlockAt(0, 63, 0).setType(Material.GLASS);
 		}
 		world.setFullTime(random.nextInt((int)(type.time.getEnd() + 1 - type.time.getBegin())) + type.time.getBegin());
@@ -92,13 +108,51 @@ public class Dungeon
 		world.setGameRule(GameRule.DO_DAYLIGHT_CYCLE, false);
 		world.setGameRule(GameRule.DO_WEATHER_CYCLE, false);
 		world.setGameRule(GameRule.DO_MOB_SPAWNING, false);
-		world.setGameRule(GameRule.KEEP_INVENTORY, true);
 		world.setGameRule(GameRule.SPAWN_RADIUS, 0);
-		world.setSpawnLocation(new Location(world, 1, 63, 0));
+		world.setSpawnLocation(new Location(world, 0.5, 64, 0.5));
 		for(Item i : world.getEntitiesByClass(Item.class))
 		{
 			i.remove();
 		}
+		
+		logger.info("Generation of Dungeon " + id + " Complete! Thinking of modifiers...");
+		float modChance = random.nextFloat(0.5f);
+		for (int attempts = random.nextInt(4); attempts > 0; attempts--)
+		{
+			if(random.nextFloat() < modChance)
+			{
+				Modifier newMod = Modifier.RandomWithWeight(random, mods);
+				for(Modifier mc : newMod.conflicts)
+				{
+					if(mods.contains(mc))
+					{
+						if(newMod.weight < mc.weight)
+						{
+							mods.remove(mc);
+							mods.add(newMod);
+						}
+					}
+					else
+						mods.add(newMod);
+				}
+				if(newMod.conflicts.length == 0)
+					mods.add(newMod);
+				modChance /= mods.size() + 0.5;
+			}
+		}
+		int highestPriority = 0;
+		for(Modifier m : mods)
+		{
+			if(m.priority > highestPriority)
+			{
+				bossBar.color(m.color);
+				highestPriority = m.priority;
+			}
+		}
+		world.setGameRule(GameRule.KEEP_INVENTORY, mods.contains(Modifier.Keeping));
+		if(mods.contains(Modifier.Unstable))
+			StartUnstableTimer();
+		logger.info(mods.size() + " Modifiers selected.");
 	}
 	
 	public void SaveDungeoneer(Player p, Dungeoneer d)
@@ -165,6 +219,7 @@ public class Dungeon
 		{
 			p.teleport(Bukkit.getWorlds().get(0).getSpawnLocation());
 			p.sendMessage(ChatColor.RED + "The Dungeon instance you were in was closed.");
+			p.hideBossBar(bossBar);
 		}
 		Bukkit.unloadWorld(world, false);
 		world.setAutoSave(false);
@@ -179,23 +234,58 @@ public class Dungeon
 		p.teleport(world.getSpawnLocation());
 		p.sendMessage(ChatColor.GRAY + "You entered the Dungeon.");
 		p.sendMessage(ChatColor.GRAY + "Seed: " + seed);
+		p.showBossBar(bossBar);
+		DisplayMods(p);
 	}
 	
 	public void Spectate(Player p)
 	{
 		Spectate(p, players.get(random.nextInt(players.size())));
+		p.showBossBar(bossBar);
 	}
 	
 	public void Spectate(Player p, Player target)
 	{
-		p.setGameMode(GameMode.SPECTATOR);
-		p.setSpectatorTarget(target);
-		p.sendMessage(ChatColor.GRAY + "You're now spectating " + target.getName() + ".");
 		if(players.remove(p))
 			for (Player pl : players)
 				pl.sendMessage(Component.text(ChatColor.GOLD + p.getName() + ChatColor.YELLOW + " has left the Dungeon."));
-		if(!spectators.contains(p))
-			spectators.add(p);
+		p.setGameMode(GameMode.SPECTATOR);
+		if(p != target)
+		{
+			p.setSpectatorTarget(target);
+			p.sendMessage(ChatColor.GRAY + "You're now spectating " + target.getName() + ".");
+			if(!spectators.contains(p))
+				spectators.add(p);
+		}
+		else
+			p.sendMessage(Component.text("You cannot spectate yourself!"));
+	}
+	
+	public void DisplayMods(Player p)
+	{
+		for(int i = 0; i < mods.size(); i++)
+		{
+			Modifier m = mods.get(i);
+			new BukkitRunnable()
+			{
+				@Override
+				public void run()
+				{
+					p.sendTitlePart(TitlePart.TITLE, m.title);
+					p.sendTitlePart(TitlePart.SUBTITLE, m.description);
+					p.playSound(p, m.sound, 2f, 0.5f);
+				}
+			}.runTaskLater(YayDungeons.instance, 60L * i + 20L);
+		}
+	}
+	
+	public void DisplayModsSimple(Player p)
+	{
+		p.sendMessage("------ Dungeon Mods ------");
+		for (Modifier m : mods)
+		{
+			p.sendMessage(Component.text(" - ").append(m.title.hoverEvent(m.description.asHoverEvent())));
+		}
 	}
 	
 	public void StopSpectating(Player p)
@@ -207,11 +297,31 @@ public class Dungeon
 				p.teleport(l);
 			else
 				p.teleport(Bukkit.getWorlds().get(0).getSpawnLocation());
+			p.hideBossBar(bossBar);
 		}
 	}
 	
-	public void Leave(Player p)
+	public boolean Leave(Player p, int method)
 	{
+		if(!p.isOp())
+		{
+			if(method == 1 && mods.contains(Modifier.Gripping))
+			{
+				p.sendMessage(Component.text("Can't leave due to the ").color(TextColor.color(0xFB5454))
+						.append(Component.text("Gripping")
+								.style(Style.empty().decoration(TextDecoration.BOLD, true).color(TextColor.color(0xA80000))))
+						.append(Component.text(" Modifier!")));
+				return false;
+			}
+			else if((method == 1 || method == 2) && mods.contains(Modifier.Locked))
+			{
+				p.sendMessage(Component.text("Can't leave due to the ").color(TextColor.color(0xFB5454))
+						.append(Component.text("Locked")
+								.style(Style.empty().decoration(TextDecoration.BOLD, true).color(TextColor.color(0xA80000))))
+						.append(Component.text(" Modifier!")));
+				return false;
+			}
+		}
 		players.remove(p);
 		for (Player pl : players)
 			pl.sendMessage(Component.text(ChatColor.GOLD + p.getName() + ChatColor.YELLOW + " has left the Dungeon."));
@@ -222,6 +332,8 @@ public class Dungeon
 			p.teleport(Bukkit.getWorlds().get(0).getSpawnLocation());
 		if(players.size() == 0)
 			CloseDungeon();
+		p.hideBossBar(bossBar);
+		return true;
 	}
 	
 	public World getWorld()
@@ -249,6 +361,11 @@ public class Dungeon
 		return savedDungeoneers;
 	}
 	
+	public boolean isCollapsed()
+	{
+		return collapsed;
+	}
+	
 	public static void deleteRecursively(File directory)
 	{
 		if(directory.exists() && directory.listFiles() != null)
@@ -266,6 +383,73 @@ public class Dungeon
 			}
 			directory.delete();
 		}
+	}
+	
+	void StartUnstableTimer()
+	{
+		bossBar.addFlag(BossBar.Flag.DARKEN_SCREEN);
+		lifetime = 910;
+		unstableCountdownID = Bukkit.getScheduler().scheduleSyncRepeatingTask(YayDungeons.instance, () -> {
+			lifetime--;
+			int seconds = lifetime % 60;
+			world.sendActionBar(Component.text(lifetime / 60 + ":" + (seconds > 9 ? "" : "0") + seconds + " until Dungeon Collapse!")
+					.color(TextColor.color(0xA80000)));
+			if(lifetime % 300 == 0)
+			{
+				world.sendMessage(Component.text(lifetime / 60 + " Minutes remaining until collapse.").color(TextColor.color(0xFB5454)));
+				world.playSound(world.getSpawnLocation(), Sound.BLOCK_RESPAWN_ANCHOR_SET_SPAWN, 100f, 0.5f);
+				UnstableScreenshake(0.75f, 20);
+			}
+			if(lifetime == 60)
+			{
+				world.sendMessage(Component.text("Collapse imminent. 1 Minute remaining!").color(TextColor.color(0xA80000)));
+				world.playSound(world.getSpawnLocation(), Sound.BLOCK_RESPAWN_ANCHOR_SET_SPAWN, 100f, 0.5f);
+				UnstableScreenshake(1.25f, 20);
+			}
+			if(lifetime == 30)
+			{
+				world.sendMessage(Component.text("The Air begins to quiver. Collapse in 30 Seconds!").color(TextColor.color(0xA80000)));
+				world.playSound(world.getSpawnLocation(), Sound.BLOCK_RESPAWN_ANCHOR_SET_SPAWN, 100f, 0.5f);
+				world.playSound(world.getSpawnLocation(), Sound.AMBIENT_BASALT_DELTAS_MOOD, 100f, 0.5f);
+				UnstableScreenshake(2f, 30);
+			}
+			if(lifetime < 10 && lifetime >= 0)
+			{
+				world.sendMessage(Component.text("Collapse in " + lifetime + " Seconds!").color(TextColor.color(0xA80000)));
+				world.playSound(world.getSpawnLocation(), Sound.BLOCK_RESPAWN_ANCHOR_SET_SPAWN, 100f, 0.5f);
+				UnstableScreenshake(3f, 10);
+			}
+			if(lifetime == 0)
+			{
+				UnstableCollapse();
+			}
+		}, 0L, 4L);
+	}
+	
+	void UnstableCollapse()
+	{
+		collapsed = true;
+		Bukkit.getScheduler().cancelTask(unstableCountdownID);
+		for (Player p : players)
+		{
+			p.damage(999999);
+		}
+	}
+	
+	void UnstableScreenshake(float severity, long duration)
+	{
+		Random shaker = new Random();
+		int shake = Bukkit.getScheduler().scheduleSyncRepeatingTask(YayDungeons.instance, () -> {
+			for (Player p : players)
+			{
+				Location loc = p.getLocation();
+				loc.setYaw(loc.getYaw() + (shaker.nextFloat() - 0.5f) * severity);
+				loc.setPitch(loc.getPitch() + (shaker.nextFloat() - 0.5f) * severity);
+				p.teleport(loc, PlayerTeleportEvent.TeleportCause.PLUGIN);
+			}
+		}, 0, 1);
+		Bukkit.getScheduler().scheduleSyncDelayedTask(YayDungeons.instance, () -> Bukkit.getScheduler().cancelTask(shake),
+				duration);
 	}
 	
 	public enum Type
@@ -290,6 +474,66 @@ public class Dungeon
 			this.storm = storm;
 			this.thunder = thunder;
 			this.icon = icon;
+		}
+	}
+	
+	public enum Modifier
+	{
+		Gripping(5, 1, Color.BLUE, Sound.ITEM_BONE_MEAL_USE, Component.text(ChatColor.YELLOW + "Gripping"),
+				Component.text("You can only leave using Portals.")),
+		Keeping(2, 0, Color.GREEN, Sound.ITEM_ARMOR_EQUIP_GOLD, Component.text(ChatColor.DARK_GREEN + "Keeping"),
+				Component.text("You keep your items upon death!")),
+		Evil(3, 1, Color.RED, Sound.ENTITY_VEX_CHARGE, Component.text(ChatColor.DARK_RED + "Evil"),
+				Component.text("The mobs in here look stronger than usual...")),
+		Locked(4, 2, Color.PINK, Sound.BLOCK_CONDUIT_DEACTIVATE, Component.text(ChatColor.LIGHT_PURPLE + "Locked"),
+				Component.text("You can only leave when the boss has been killed.")),
+		Generous(3, 0, Color.GREEN, Sound.ENTITY_PLAYER_LEVELUP, Component.text(ChatColor.GOLD + "Generous"),
+				Component.text("More loot!"), Keeping),
+		Full(3, 1, Color.RED, Sound.AMBIENT_CAVE, Component.text(ChatColor.RED + "Full"),
+				Component.text("There are more mobs in here than usual...")),
+		Unstable(1, 3, Color.PINK, Sound.BLOCK_RESPAWN_ANCHOR_SET_SPAWN,
+				Component.text("#").style(Style.style(TextColor.color(0x9E0484), TextDecoration.OBFUSCATED))
+						.append(Component.text(" Unstable ").style(Style.empty().decoration(TextDecoration.OBFUSCATED, false)))
+						.append(Component.text("#")),
+				Component.text(ChatColor.RED + "This Dungeon will collapse in 15 minutes!"), Keeping);
+		
+		//TODO: Functionality of Evil, Generous and Full
+		
+		public final int weight;
+		public final int priority;
+		public final Color color;
+		public final Sound sound;
+		public final Component title;
+		public final Component description;
+		public final Modifier[] conflicts;
+		Modifier(int weight, int priority, Color color, Sound sound, Component title, Component description, Modifier... conflicts)
+		{
+			this.weight = weight;
+			this.priority = priority;
+			this.color = color;
+			this.sound = sound;
+			this.title = title;
+			this.description = description;
+			this.conflicts = conflicts;
+		}
+		
+		public static Modifier RandomWithWeight(Random r, List<Modifier> current)
+		{
+			List<Modifier> weightedValues = new ArrayList<>();
+			List<Modifier> exceptions = new ArrayList<>(current);
+			for(Modifier m : current)
+			{
+				exceptions.addAll(Arrays.stream(m.conflicts).toList());
+			}
+			for(Modifier m : Modifier.values())
+			{
+				if(!exceptions.contains(m))
+				{
+					for(int i = 0; i < m.weight; i++)
+						weightedValues.add(m);
+				}
+			}
+			return weightedValues.get(r.nextInt(weightedValues.size()));
 		}
 	}
 }

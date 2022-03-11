@@ -14,7 +14,7 @@ public class PortalListener implements Listener
 		if(DungeonManager.isWorldDungeon(e.getFrom().getWorld()))
 		{
 			e.setCancelled(true);
-			DungeonManager.leaveDungeon(e.getPlayer());
+			DungeonManager.leaveDungeon(e.getPlayer(), 2);
 		}
 	}
 	

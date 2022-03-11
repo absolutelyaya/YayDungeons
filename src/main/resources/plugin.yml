@@ -11,5 +11,7 @@ commands:
   leave:
     description: Leave a dungeon
   dungeons:
-    description: description
+    description: Open the Dungeon Browser
+  dungeonmods:
+    description: Check the Mods of the Dungeon that you're in
 #permissions:

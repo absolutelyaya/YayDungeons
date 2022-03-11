@@ -59,7 +59,8 @@ public class DungeonManager
 	{
 		if(Dungeoneers.containsKey(p))
 		{
-			leaveDungeon(p);
+			if (!leaveDungeon(p, 1))
+				return;
 		}
 		if(Dungeons.containsKey(id))
 		{
@@ -79,19 +80,24 @@ public class DungeonManager
 		}
 	}
 	
-	public static void leaveDungeon(Player p)
+	public static boolean leaveDungeon(Player p, int method)
 	{
 		if(Dungeoneers.containsKey(p))
 		{
 			Dungeon dungeon = Dungeons.get(Dungeoneers.get(p).getCurrentDungeon());
-			dungeon.Leave(p);
-			dungeon.SaveDungeoneer(p, Dungeoneers.get(p));
-			Dungeoneers.remove(p);
-			p.setGameMode(GameMode.SURVIVAL);
-			p.sendMessage(ChatColor.GRAY + "You left the Dungeon.");
+			boolean result = dungeon.Leave(p, method);
+			if (result)
+			{
+				dungeon.SaveDungeoneer(p, Dungeoneers.get(p));
+				Dungeoneers.remove(p);
+				p.setGameMode(GameMode.SURVIVAL);
+				p.sendMessage(ChatColor.GRAY + "You left the Dungeon.");
+			}
+			return result;
 		}
 		else
 			p.sendMessage(ChatColor.RED + "You aren't in any Dungeon.");
+		return false;
 	}
 	
 	public static Dungeoneer getDungeoneer(Player p)

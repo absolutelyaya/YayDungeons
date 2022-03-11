@@ -8,8 +8,10 @@ import yaya.dungeons.listeners.*;
 import yaya.dungeons.menus.DungeonBrowserMenu;
 import yaya.dungeons.utilities.DungeonManager;
 
+import java.util.Arrays;
 import java.util.Objects;
 import java.util.Random;
+import java.util.UUID;
 
 public final class YayDungeons extends JavaPlugin
 {
@@ -73,12 +75,16 @@ public final class YayDungeons extends JavaPlugin
 				return true;
 			}
 			case "leave" -> {
-				DungeonManager.leaveDungeon(p);
+				DungeonManager.leaveDungeon(p, 1);
 				return true;
 			}
 			case "dungeons" -> {
 				new DungeonBrowserMenu(p, p).open();
 				return true;
+			}
+			case "dungeonmods" -> {
+				if(DungeonManager.isWorldDungeon(p.getWorld()))
+					DungeonManager.getDungeon(UUID.fromString(p.getWorld().getName().split("\\.")[1])).DisplayModsSimple(p);
 			}
 		}
 		return false;
