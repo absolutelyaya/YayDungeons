@@ -41,6 +41,7 @@ public class Dungeon
 	private final int sizeX, sizeY;
 	private final List<Player> players = new ArrayList<>();
 	private final List<Player> spectators = new ArrayList<>();
+	private final List<UUID> graveyard = new ArrayList<>();
 	private final HashMap<Player, Dungeoneer> savedDungeoneers = new HashMap<>();
 	private final Random random;
 	private final int seed;
@@ -52,6 +53,7 @@ public class Dungeon
 	private int lifetime = -1;
 	private int unstableCountdownID = -1;
 	private boolean collapsed;
+	private Player leader;
 	
 	public Dungeon(UUID id, int sizeX, int sizeY, int seed)
 	{
@@ -236,29 +238,38 @@ public class Dungeon
 		p.sendMessage(ChatColor.GRAY + "Seed: " + seed);
 		p.showBossBar(bossBar);
 		DisplayMods(p);
+		if(leader == null)
+			setLeader(p);
 	}
 	
-	public void Spectate(Player p)
-	{
-		Spectate(p, players.get(random.nextInt(players.size())));
-		p.showBossBar(bossBar);
-	}
-	
-	public void Spectate(Player p, Player target)
+	public boolean Spectate(Player p)
 	{
 		if(players.remove(p))
 			for (Player pl : players)
 				pl.sendMessage(Component.text(ChatColor.GOLD + p.getName() + ChatColor.YELLOW + " has left the Dungeon."));
-		p.setGameMode(GameMode.SPECTATOR);
+		return Spectate(p, players.get(random.nextInt(players.size())));
+	}
+	
+	public boolean Spectate(Player p, Player target)
+	{
+		p.showBossBar(bossBar);
+		if(players.remove(p))
+			for (Player pl : players)
+				pl.sendMessage(Component.text(ChatColor.GOLD + p.getName() + ChatColor.YELLOW + " has left the Dungeon."));
 		if(p != target)
 		{
+			p.setGameMode(GameMode.SPECTATOR);
 			p.setSpectatorTarget(target);
 			p.sendMessage(ChatColor.GRAY + "You're now spectating " + target.getName() + ".");
 			if(!spectators.contains(p))
 				spectators.add(p);
+			return true;
 		}
 		else
+		{
 			p.sendMessage(Component.text("You cannot spectate yourself!"));
+			return false;
+		}
 	}
 	
 	public void DisplayMods(Player p)
@@ -297,6 +308,7 @@ public class Dungeon
 				p.teleport(l);
 			else
 				p.teleport(Bukkit.getWorlds().get(0).getSpawnLocation());
+			p.setGameMode(GameMode.SURVIVAL);
 			p.hideBossBar(bossBar);
 		}
 	}
@@ -332,6 +344,8 @@ public class Dungeon
 			p.teleport(Bukkit.getWorlds().get(0).getSpawnLocation());
 		if(players.size() == 0)
 			CloseDungeon();
+		else if(leader == p)
+			setLeader(players.get(random.nextInt(players.size())));
 		p.hideBossBar(bossBar);
 		return true;
 	}
@@ -343,7 +357,13 @@ public class Dungeon
 	
 	public List<Player> getPlayers()
 	{
-		return players;
+		List<Player> playerList = new ArrayList<>(players);
+		for (UUID id : graveyard)
+		{
+			Player p = Bukkit.getPlayer(id);
+			playerList.remove(p);
+		}
+		return playerList;
 	}
 	
 	public List<Player> getSpectators()
@@ -364,6 +384,27 @@ public class Dungeon
 	public boolean isCollapsed()
 	{
 		return collapsed;
+	}
+	
+	public boolean isCanJoin(Player p)
+	{
+		return !graveyard.contains(p.getUniqueId());
+	}
+	
+	public Player getLeader()
+	{
+		return leader;
+	}
+	
+	void setLeader(Player p)
+	{
+		leader = p;
+		world.sendMessage(Component.text(ChatColor.GOLD + p.getName() + ChatColor.YELLOW + " is now the Dungeon Raids Leader!"));
+	}
+	
+	public void addToGraveyard(Player p)
+	{
+		graveyard.add(p.getUniqueId());
 	}
 	
 	public static void deleteRecursively(File directory)

@@ -1,5 +1,6 @@
 package yaya.dungeons.menus;
 
+import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
@@ -8,6 +9,7 @@ import yaya.dungeons.utilities.DungeonManager;
 import yaya.dungeons.utilities.ItemFactory;
 
 import java.util.List;
+import java.util.UUID;
 
 public class DungeonBrowserMenu extends Menu
 {
@@ -36,15 +38,13 @@ public class DungeonBrowserMenu extends Menu
 	{
 		if(inventory.getItem(e.getSlot()) != null)
 		{
-			switch(e.getClick())
+			switch (e.getClick())
 			{
-				case LEFT:
-					break;
-				case RIGHT:
-					new SpectatorMenu(owner, owner, dungeons.get(e.getSlot())).open();
-					break;
+				case LEFT -> DungeonManager.sendJoinRequest(owner, UUID.fromString(dungeons.get(e.getSlot()).getWorld().getName().split("\\.")[1]));
+				case RIGHT -> new SpectatorMenu(owner, owner, dungeons.get(e.getSlot())).open();
 			}
 		}
+		owner.playSound(owner, Sound.UI_BUTTON_CLICK, 1, 1);
 		e.setCancelled(true);
 	}
 	
@@ -60,7 +60,8 @@ public class DungeonBrowserMenu extends Menu
 		int i = 0;
 		for(Dungeon d : dungeons)
 		{
-			inventory.setItem(i, ItemFactory.makeItem(d.getType().icon, d.getWorld().getName()));
+			inventory.setItem(i, ItemFactory.makeItem(d.getType().icon, d.getWorld().getName(),
+					"Leader: " + d.getLeader().getName(), "", "Left Click to send a Join Request", "Right Click to spectate"));
 			i++;
 		}
 	}

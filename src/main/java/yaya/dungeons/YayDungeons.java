@@ -1,14 +1,17 @@
 package yaya.dungeons;
 
+import net.kyori.adventure.text.Component;
+import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
+import yaya.dungeons.dungeons.Dungeon;
 import yaya.dungeons.listeners.*;
 import yaya.dungeons.menus.DungeonBrowserMenu;
 import yaya.dungeons.utilities.DungeonManager;
 
-import java.util.Arrays;
 import java.util.Objects;
 import java.util.Random;
 import java.util.UUID;
@@ -56,6 +59,8 @@ public final class YayDungeons extends JavaPlugin
 	{
 		Objects.requireNonNull(getCommand("dungen")).setExecutor(this);
 		Objects.requireNonNull(getCommand("leave")).setExecutor(this);
+		Objects.requireNonNull(getCommand("dungeonaccept")).setExecutor(this);
+		Objects.requireNonNull(getCommand("dungeondecline")).setExecutor(this);
 	}
 	
 	@Override
@@ -84,7 +89,43 @@ public final class YayDungeons extends JavaPlugin
 			}
 			case "dungeonmods" -> {
 				if(DungeonManager.isWorldDungeon(p.getWorld()))
+				{
 					DungeonManager.getDungeon(UUID.fromString(p.getWorld().getName().split("\\.")[1])).DisplayModsSimple(p);
+					return true;
+				}
+				else
+					p.sendMessage(Component.text("You aren't in a Dungeon!"));
+				return false;
+			}
+			case "dungeonaccept" -> {
+				if(DungeonManager.isWorldDungeon(p.getWorld()) && args.length == 1)
+				{
+					UUID dungeonID = UUID.fromString(p.getWorld().getName().split("\\.")[1]);
+					Dungeon d = DungeonManager.getDungeon(dungeonID);
+					if(d.getLeader().equals(p))
+					{
+						Player target = Bukkit.getPlayer(args[0]);
+						if (!DungeonManager.AcceptJoinRequest(target, dungeonID))
+							p.sendMessage(Component.text(ChatColor.RED + "Request invalid."));
+						return true;
+					}
+				}
+				return false;
+			}
+			case "dungeondecline" -> {
+				if(DungeonManager.isWorldDungeon(p.getWorld()) && args.length == 1)
+				{
+					UUID dungeonID = UUID.fromString(p.getWorld().getName().split("\\.")[1]);
+					Dungeon d = DungeonManager.getDungeon(dungeonID);
+					if(d.getLeader() == p)
+					{
+						Player target = Bukkit.getPlayer(args[0]);
+						if (!DungeonManager.DeclineJoinRequest(target, dungeonID))
+							p.sendMessage(Component.text(ChatColor.RED + "Request invalid."));
+						return true;
+					}
+				}
+				return false;
 			}
 		}
 		return false;

@@ -1,8 +1,8 @@
 package yaya.dungeons.menus;
 
 import org.bukkit.ChatColor;
-import org.bukkit.GameMode;
 import org.bukkit.Material;
+import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
@@ -39,14 +39,18 @@ public class SpectatorMenu extends Menu
 	{
 		int slot = e.getSlot();
 		if(slot == 22)
+		{
 			dungeon.StopSpectating(owner);
+			owner.closeInventory(InventoryCloseEvent.Reason.PLUGIN);
+		}
 		else if(slot < players.size())
 		{
 			Player target = players.get(slot);
-			dungeon.Spectate(owner, target);
+			if(dungeon.Spectate(owner, target))
+				owner.closeInventory(InventoryCloseEvent.Reason.PLUGIN);
 		}
+		owner.playSound(owner, Sound.UI_BUTTON_CLICK, 1, 1);
 		e.setCancelled(true);
-		owner.closeInventory(InventoryCloseEvent.Reason.PLUGIN);
 	}
 	
 	@Override

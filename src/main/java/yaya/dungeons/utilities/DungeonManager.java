@@ -1,9 +1,13 @@
 package yaya.dungeons.utilities;
 
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.GameMode;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
+import org.bukkit.event.inventory.InventoryCloseEvent;
 import yaya.dungeons.dungeons.Dungeon;
 import yaya.dungeons.dungeons.Dungeoneer;
 
@@ -15,6 +19,7 @@ public class DungeonManager
 {
 	static HashMap<UUID, Dungeon> Dungeons = new HashMap<>();
 	static HashMap<Player, Dungeoneer> Dungeoneers = new HashMap<>();
+	static HashMap<Player, UUID> pendingJoinRequests = new HashMap<>();
 	
 	public static UUID newDungeon(int sizeX, int sizeY, int seed)
 	{
@@ -110,5 +115,48 @@ public class DungeonManager
 		Dungeon d = Dungeons.get(id);
 		d.CloseDungeon();
 		Dungeons.remove(id);
+	}
+	
+	public static void sendJoinRequest(Player p, UUID dungeonID)
+	{
+		if(isWorldDungeon(p.getWorld()))
+		{
+			p.sendMessage(Component.text(ChatColor.RED + "You're already in a Dungeon!"));
+			return;
+		}
+		if(!getDungeon(dungeonID).isCanJoin(p))
+		{
+			p.sendMessage(Component.text(ChatColor.RED + "You can't join this dungeon!"));
+			return;
+		}
+		pendingJoinRequests.put(p, dungeonID);
+		getDungeon(dungeonID).getLeader().sendMessage(
+				Component.text(ChatColor.GOLD + p.getName() + ChatColor.YELLOW + " would like to join this Dungeon.")
+						.append(Component.text(ChatColor.GREEN + " [Accept]").clickEvent(ClickEvent.runCommand("/dungeonaccept " + p.getName())))
+						.append(Component.text(ChatColor.RED + " [Decline]").clickEvent(ClickEvent.runCommand("/dungeondecline " + p.getName()))));
+		p.sendMessage(Component.text(ChatColor.YELLOW + "Join Request sent."));
+		p.closeInventory(InventoryCloseEvent.Reason.PLUGIN);
+	}
+	
+	public static boolean AcceptJoinRequest(Player p, UUID dungeonID)
+	{
+		if(pendingJoinRequests.containsKey(p) && pendingJoinRequests.get(p).equals(dungeonID))
+		{
+			Bukkit.broadcast(Component.text("a"));
+			enterDungeon(p, dungeonID);
+			pendingJoinRequests.remove(p);
+			return true;
+		}
+		return false;
+	}
+	
+	public static boolean DeclineJoinRequest(Player p, UUID dungeonID)
+	{
+		if(pendingJoinRequests.containsKey(p) && pendingJoinRequests.get(p).equals(dungeonID))
+		{
+			pendingJoinRequests.remove(p);
+			return true;
+		}
+		return false;
 	}
 }

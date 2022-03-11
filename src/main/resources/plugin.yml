@@ -14,4 +14,8 @@ commands:
     description: Open the Dungeon Browser
   dungeonmods:
     description: Check the Mods of the Dungeon that you're in
+  dungeonaccept:
+    description: accept a Dungeon join request or invite
+  dungeondecline:
+    description: decline a Dungeon join request or invite
 #permissions:
