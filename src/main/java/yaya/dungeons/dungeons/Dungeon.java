@@ -13,6 +13,7 @@ import com.sk89q.worldedit.function.operation.Operations;
 import com.sk89q.worldedit.math.BlockVector3;
 import com.sk89q.worldedit.math.transform.AffineTransform;
 import com.sk89q.worldedit.session.ClipboardHolder;
+import net.kyori.adventure.text.Component;
 import org.bukkit.*;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
@@ -29,8 +30,7 @@ public class Dungeon
 	static Logger logger = null;
 	
 	private final UUID id;
-	private final int sizeX;
-	private final int sizeY;
+	private final int sizeX, sizeY;
 	private final List<Player> players = new ArrayList<>();
 	private final List<Player> spectators = new ArrayList<>();
 	private final HashMap<Player, Dungeoneer> savedDungeoneers = new HashMap<>();
@@ -49,27 +49,41 @@ public class Dungeon
 		this.sizeY = sizeY;
 		this.seed = seed;
 		random = new Random(seed);
-		//type = Type.values()[random.nextInt(Type.values().length)];
-		type = Type.Nature; //I just want to get one type working for now.
+		type = Type.values()[random.nextInt(Type.values().length)];
+		//type = Type.Test; //I just want to get one type working for now.
+		logger.info(String.valueOf(type));
+		generate();
+	}
+	public Dungeon(UUID id, int sizeX, int sizeY, int seed, Type type)
+	{
+		if(logger == null)
+			logger = YayDungeons.instance.getLogger();
+		this.id = id;
+		this.sizeX = sizeX;
+		this.sizeY = sizeY;
+		this.seed = seed;
+		random = new Random(seed);
+		this.type = type;
 		logger.info(String.valueOf(type));
 		generate();
 	}
 	
 	void generate()
 	{
-		Bukkit.broadcastMessage("Generating a dungeon...");
-		WorldCreator wc = new WorldCreator("Dungeon-" + id.toString());
+		logger.info("starting generation of Dungeon " + id);
+		Bukkit.broadcast(Component.text("Generating a dungeon..."));
+		WorldCreator wc = new WorldCreator("Dungeon-" + type.name() + "." + id.toString());
 		wc.type(WorldType.FLAT);
 		wc.generatorSettings("{\"structures\": {\"structures\": {\"village\": {\"salt\": 8015723, \"spacing\": 32, \"separation\": 8}}}, " +
 									 "\"layers\": [{\"block\": \"air\", \"height\": 1}], \"biome\": \"" + type.biome + "\"}");
 		wc.generateStructures(false);
 		world = wc.createWorld();
 		int error;
-		if((error = placeRoom("Rooms/NatureEntrance.schem", BlockVector3.at(0,63,0), 0, false)) == 0)
-			Bukkit.broadcastMessage("Dungeon Generation Complete!");
+		if((error = placeRoom("Rooms/" + type.name() +"/Entrance.schem", BlockVector3.at(0,63,0), 0, false)) == 0)
+			Bukkit.broadcast(Component.text("Dungeon Generation Complete!"));
 		else
 		{
-			Bukkit.broadcastMessage("Something went wrong during Dungeon generation. Error Code " + error);
+			Bukkit.broadcast(Component.text("Something went wrong during Dungeon generation. Error Code " + error));
 			world.getBlockAt(0, 63, 0).setType(Material.GLASS);
 		}
 		world.setFullTime(random.nextInt((int)(type.time.getEnd() + 1 - type.time.getBegin())) + type.time.getBegin());
@@ -144,6 +158,7 @@ public class Dungeon
 	
 	public void CloseDungeon()
 	{
+		logger.info("Closing Dungeon " + id);
 		List<Player> allPlayers = world.getPlayers();
 		allPlayers.addAll(spectators);
 		for (Player p : allPlayers)
@@ -158,15 +173,48 @@ public class Dungeon
 	
 	public void Enter(Player p)
 	{
+		for (Player pl : players)
+			pl.sendMessage(Component.text(ChatColor.GOLD + p.getName() + ChatColor.YELLOW + " has entered the Dungeon."));
 		players.add(p);
 		p.teleport(world.getSpawnLocation());
 		p.sendMessage(ChatColor.GRAY + "You entered the Dungeon.");
 		p.sendMessage(ChatColor.GRAY + "Seed: " + seed);
 	}
 	
+	public void Spectate(Player p)
+	{
+		Spectate(p, players.get(random.nextInt(players.size())));
+	}
+	
+	public void Spectate(Player p, Player target)
+	{
+		p.setGameMode(GameMode.SPECTATOR);
+		p.setSpectatorTarget(target);
+		p.sendMessage(ChatColor.GRAY + "You're now spectating " + target.getName() + ".");
+		if(players.remove(p))
+			for (Player pl : players)
+				pl.sendMessage(Component.text(ChatColor.GOLD + p.getName() + ChatColor.YELLOW + " has left the Dungeon."));
+		if(!spectators.contains(p))
+			spectators.add(p);
+	}
+	
+	public void StopSpectating(Player p)
+	{
+		if (spectators.remove(p))
+		{
+			Location l = p.getBedSpawnLocation();
+			if(l != null)
+				p.teleport(l);
+			else
+				p.teleport(Bukkit.getWorlds().get(0).getSpawnLocation());
+		}
+	}
+	
 	public void Leave(Player p)
 	{
 		players.remove(p);
+		for (Player pl : players)
+			pl.sendMessage(Component.text(ChatColor.GOLD + p.getName() + ChatColor.YELLOW + " has left the Dungeon."));
 		Location l = p.getBedSpawnLocation();
 		if(l != null)
 			p.teleport(l);
@@ -179,6 +227,21 @@ public class Dungeon
 	public World getWorld()
 	{
 		return world;
+	}
+	
+	public List<Player> getPlayers()
+	{
+		return players;
+	}
+	
+	public List<Player> getSpectators()
+	{
+		return spectators;
+	}
+	
+	public Type getType()
+	{
+		return type;
 	}
 	
 	public HashMap<Player, Dungeoneer> getSavedDungeoneers()
@@ -195,7 +258,8 @@ public class Dungeon
 				if (file.isDirectory())
 				{
 					deleteRecursively(file);
-				} else
+				}
+				else
 				{
 					file.delete();
 				}
@@ -206,23 +270,26 @@ public class Dungeon
 	
 	public enum Type
 	{
-		Nature("forest", new Range(0, 24000), false, false),
-		Desert("desert", new Range(0, 24000), false, false),
-		Castle("the_void", new Range(18000, 18000), false, false),
-		Ashen("basalt_deltas", new Range(0, 24000), true, false),
-		Demonic("crimson_forest", new Range(18000, 18000), true, false),
-		Mansion("dark_forest", new Range(12500, 23500), true, true);
+		Test("the_void", new Range(0, 24000), false, false, Material.WHITE_CONCRETE),
+		Nature("forest", new Range(0, 24000), false, false, Material.OAK_SAPLING),
+		Desert("desert", new Range(0, 24000), false, false, Material.CACTUS),
+		Castle("the_void", new Range(18000, 18000), false, false, Material.STONE_BRICKS),
+		Ashen("basalt_deltas", new Range(0, 24000), true, false, Material.DEAD_BUSH),
+		Demonic("crimson_forest", new Range(18000, 18000), true, false, Material.CRIMSON_HYPHAE),
+		Mansion("dark_forest", new Range(12500, 23500), true, true, Material.DARK_OAK_SAPLING);
 		
-		public String biome;
-		public Range time;
-		public boolean storm;
-		public boolean thunder;
-		Type(String biome, Range time, boolean storm, boolean thunder)
+		public final String biome;
+		public final Range time;
+		public final boolean storm;
+		public final boolean thunder;
+		public final Material icon;
+		Type(String biome, Range time, boolean storm, boolean thunder, Material icon)
 		{
 			this.biome = biome;
 			this.time = time;
 			this.storm = storm;
 			this.thunder = thunder;
+			this.icon = icon;
 		}
 	}
 }

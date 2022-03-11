@@ -1,7 +1,7 @@
 name: YayDungeons
 version: '${project.version}'
 main: yaya.dungeons.YayDungeons
-api-version: 1.17
+api-version: 1.18
 authors: [ Absolutelyaya ]
 website: https://www.curseforge.com/members/absolutelyaya/projects
 depend: [ WorldEdit ]
@@ -10,6 +10,6 @@ commands:
     description: Debug command for generating a new dungeon
   leave:
     description: Leave a dungeon
-  class:
-    description: nothing for now
+  dungeons:
+    description: description
 #permissions:

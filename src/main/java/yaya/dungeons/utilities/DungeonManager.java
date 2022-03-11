@@ -6,9 +6,9 @@ import org.bukkit.World;
 import org.bukkit.entity.Player;
 import yaya.dungeons.dungeons.Dungeon;
 import yaya.dungeons.dungeons.Dungeoneer;
-import yaya.dungeons.menus.ClassSelectionMenu;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.UUID;
 
 public class DungeonManager
@@ -22,6 +22,16 @@ public class DungeonManager
 		Dungeon d = new Dungeon(id, sizeX, sizeY, seed);
 		Dungeons.put(id, d);
 		return id;
+	}
+	
+	public static Dungeon getDungeon(UUID id)
+	{
+		return Dungeons.get(id);
+	}
+	
+	public static List<Dungeon> getDungeons()
+	{
+		return Dungeons.values().stream().toList();
 	}
 	
 	public static boolean isWorldDungeon(World world)
@@ -60,15 +70,12 @@ public class DungeonManager
 				Dungeoneer d;
 				Dungeoneers.put(p, (d = dungeon.getSavedDungeoneers().get(p)));
 				d.setCurrentDungeon(id);
-				d.loadDungeonInventory(p);
 			}
 			else
 			{
 				Dungeoneers.put(p, new Dungeoneer(id, p));
-				new ClassSelectionMenu(p, p).open();
 			}
 			p.setGameMode(GameMode.ADVENTURE);
-			p.getInventory().clear();
 		}
 	}
 	
@@ -78,9 +85,7 @@ public class DungeonManager
 		{
 			Dungeon dungeon = Dungeons.get(Dungeoneers.get(p).getCurrentDungeon());
 			dungeon.Leave(p);
-			Dungeoneer d;
-			dungeon.SaveDungeoneer(p, d = Dungeoneers.get(p));
-			d.loadOutsideInventory(p);
+			dungeon.SaveDungeoneer(p, Dungeoneers.get(p));
 			Dungeoneers.remove(p);
 			p.setGameMode(GameMode.SURVIVAL);
 			p.sendMessage(ChatColor.GRAY + "You left the Dungeon.");
@@ -98,5 +103,6 @@ public class DungeonManager
 	{
 		Dungeon d = Dungeons.get(id);
 		d.CloseDungeon();
+		Dungeons.remove(id);
 	}
 }

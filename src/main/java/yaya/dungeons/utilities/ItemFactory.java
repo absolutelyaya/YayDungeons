@@ -1,14 +1,9 @@
 package yaya.dungeons.utilities;
 
-import com.mojang.authlib.GameProfile;
-import com.mojang.authlib.properties.Property;
+import net.kyori.adventure.text.Component;
 import net.md_5.bungee.api.ChatColor;
-import net.minecraft.nbt.GameProfileSerializer;
-import net.minecraft.nbt.NBTTagCompound;
-import org.apache.commons.lang.reflect.FieldUtils;
 import org.bukkit.Color;
 import org.bukkit.Material;
-import org.bukkit.NamespacedKey;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeModifier;
@@ -17,10 +12,8 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.LeatherArmorMeta;
 import org.bukkit.inventory.meta.PotionMeta;
 import org.bukkit.inventory.meta.SkullMeta;
-import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.potion.PotionEffect;
 
-import java.lang.reflect.Field;
 import java.util.*;
 
 public class ItemFactory
@@ -30,15 +23,15 @@ public class ItemFactory
 		ItemStack item = new ItemStack(mat);
 		ItemMeta meta = item.getItemMeta();
 		if(name.length() > 0)
-			meta.setDisplayName(ChatColor.RESET + name);
+			meta.displayName(Component.text(ChatColor.RESET + name));
 		if (lore.length > 0)
 		{
-			List<String> lor = new ArrayList<>();
+			List<Component> lor = new ArrayList<>();
 			for (String s : lore)
 			{
-				lor.add(ChatColor.RESET + s);
+				lor.add(Component.text(ChatColor.RESET + s));
 			}
-			meta.setLore(lor);
+			meta.lore(lor);
 		}
 		item.setItemMeta(meta);
 		return item;
@@ -49,15 +42,15 @@ public class ItemFactory
 		ItemStack item = new ItemStack(mat);
 		ItemMeta meta = item.getItemMeta();
 		if(name.length() > 0)
-			meta.setDisplayName(ChatColor.RESET + name);
+			meta.displayName(Component.text(ChatColor.RESET + name));
 		if (lore.length > 0)
 		{
-			List<String> lor = new ArrayList<>();
+			List<Component> lor = new ArrayList<>();
 			for (String s : lore)
 			{
-				lor.add(ChatColor.RESET + s);
+				lor.add(Component.text(ChatColor.RESET + s));
 			}
-			meta.setLore(lor);
+			meta.lore(lor);
 		}
 		item.setItemMeta(meta);
 		item.setAmount(count);
@@ -69,50 +62,17 @@ public class ItemFactory
 		ItemStack item = new ItemStack(mat);
 		ItemMeta meta = item.getItemMeta();
 		if(name.length() > 0)
-			meta.setDisplayName(ChatColor.RESET + name);
+			meta.displayName(Component.text(ChatColor.RESET + name));
 		if (lore.length > 0)
 		{
-			List<String> lor = new ArrayList<>();
+			List<Component> lor = new ArrayList<>();
 			for (String s : lore)
 			{
-				lor.add(ChatColor.RESET + s);
+				lor.add(Component.text(ChatColor.RESET + s));
 			}
-			meta.setLore(lor);
+			meta.lore(lor);
 		}
 		meta.setUnbreakable(unbreakable);
-		item.setItemMeta(meta);
-		return item;
-	}
-	
-	public static ItemStack makeSkull(String url, String name, String... lore)
-	{
-		ItemStack item = new ItemStack(Material.PLAYER_HEAD);
-		SkullMeta meta = (SkullMeta) item.getItemMeta();
-		if(name.length() > 0)
-			meta.setDisplayName(ChatColor.RESET + name);
-		if (lore.length > 0)
-		{
-			List<String> lor = new ArrayList<>();
-			for (String s : lore)
-			{
-				lor.add(ChatColor.RESET + s);
-			}
-			meta.setLore(lor);
-		}
-		UUID uuid = UUID.randomUUID();
-		GameProfile profile = new GameProfile(uuid, "randy" + uuid);
-		String texture = new String(Base64.getEncoder()
-				.encode(String.format("{textures:{SKIN:{url:\"%s\"}}}", new Object[] { url }).getBytes()));
-		profile.getProperties().put("textures", new Property("textures", texture));
-		Field profileField = FieldUtils.getField(meta.getClass(), "profile", true);
-		try {
-			profileField.set(meta, profile);
-		} catch (IllegalArgumentException | IllegalAccessException e)
-		{
-			e.printStackTrace();
-		}
-		meta.getPersistentDataContainer().set(NamespacedKey.fromString("display"), PersistentDataType.STRING,
-				"SkullOwner:" + GameProfileSerializer.serialize(new NBTTagCompound(), profile));
 		item.setItemMeta(meta);
 		return item;
 	}
@@ -122,14 +82,15 @@ public class ItemFactory
 		ItemStack item = new ItemStack(Material.PLAYER_HEAD);
 		SkullMeta meta = (SkullMeta) item.getItemMeta();
 		if(name.length() > 0)
-			meta.setDisplayName(ChatColor.RESET + name);
+			meta.displayName(Component.text(ChatColor.RESET + name));
 		if (lore.length > 0)
 		{
+			List<Component> lor = new ArrayList<>();
 			for (String s : lore)
 			{
-				s = ChatColor.RESET + s;
+				lor.add(Component.text(ChatColor.RESET + s));
 			}
-			meta.setLore(Arrays.asList(lore));
+			meta.lore(lor);
 		}
 		meta.setOwningPlayer(owner);
 		item.setItemMeta(meta);
@@ -144,20 +105,19 @@ public class ItemFactory
 			PotionMeta meta = (PotionMeta)pot.getItemMeta();
 			meta.setColor(color);
 			if(name.length() > 0)
-				meta.setDisplayName(ChatColor.RESET + name);
+				meta.displayName(Component.text(ChatColor.RESET + name));
 			for(PotionEffect effect : effects)
 			{
 				meta.addCustomEffect(effect, true);
 			}
 			if (lore.length > 0)
 			{
-				
-				List<String> lor = new ArrayList<>();
+				List<Component> lor = new ArrayList<>();
 				for (String s : lore)
 				{
-					lor.add(ChatColor.RESET + s);
+					lor.add(Component.text(ChatColor.RESET + s));
 				}
-				meta.setLore(lor);
+				meta.lore(lor);
 			}
 			pot.setItemMeta(meta);
 			return pot;
@@ -174,20 +134,19 @@ public class ItemFactory
 			PotionMeta meta = (PotionMeta)pot.getItemMeta();
 			meta.setColor(color);
 			if(name.length() > 0)
-				meta.setDisplayName(ChatColor.RESET + name);
+				meta.displayName(Component.text(ChatColor.RESET + name));
 			for(PotionEffect effect : effects)
 			{
 				meta.addCustomEffect(effect, true);
 			}
 			if (lore.length > 0)
 			{
-				
-				List<String> lor = new ArrayList<>();
+				List<Component> lor = new ArrayList<>();
 				for (String s : lore)
 				{
-					lor.add(ChatColor.RESET + s);
+					lor.add(Component.text(ChatColor.RESET + s));
 				}
-				meta.setLore(lor);
+				meta.lore(lor);
 			}
 			pot.setItemMeta(meta);
 			pot.setAmount(count);
@@ -202,15 +161,15 @@ public class ItemFactory
 		ItemStack item = new ItemStack(mat);
 		ItemMeta meta = item.getItemMeta();
 		if(name.length() > 0)
-			meta.setDisplayName(ChatColor.RESET + name);
+			meta.displayName(Component.text(ChatColor.RESET + name));
 		if (lore.length > 0)
 		{
-			List<String> lor = new ArrayList<>();
+			List<Component> lor = new ArrayList<>();
 			for (String s : lore)
 			{
-				lor.add(ChatColor.RESET + s);
+				lor.add(Component.text(ChatColor.RESET + s));
 			}
-			meta.setLore(lor);
+			meta.lore(lor);
 		}
 		for (int i = 0; i < attributes.length; i++)
 		{
@@ -226,15 +185,15 @@ public class ItemFactory
 		ItemStack item = new ItemStack(mat);
 		LeatherArmorMeta meta = (LeatherArmorMeta) item.getItemMeta();
 		if(name.length() > 0)
-			meta.setDisplayName(ChatColor.RESET + name);
+			meta.displayName(Component.text(ChatColor.RESET + name));
 		if (lore.length > 0)
 		{
-			List<String> lor = new ArrayList<>();
+			List<Component> lor = new ArrayList<>();
 			for (String s : lore)
 			{
-				lor.add(ChatColor.RESET + s);
+				lor.add(Component.text(ChatColor.RESET + s));
 			}
-			meta.setLore(lor);
+			meta.lore(lor);
 		}
 		for (int i = 0; i < attributes.length; i++)
 		{
