@@ -1,6 +1,7 @@
 package yaya.dungeons.utilities;
 
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.Style;
 import net.md_5.bungee.api.ChatColor;
 import org.bukkit.Color;
 import org.bukkit.Material;
@@ -29,7 +30,7 @@ public class ItemFactory
 			List<Component> lor = new ArrayList<>();
 			for (String s : lore)
 			{
-				lor.add(Component.text(ChatColor.RESET + s));
+				lor.add(Component.text(ChatColor.RESET + s).style(Style.empty()));
 			}
 			meta.lore(lor);
 		}

@@ -72,10 +72,10 @@ public final class YayDungeons extends JavaPlugin
 			case "dungen" -> {
 				if (args.length == 0)
 				{
-					DungeonManager.enterDungeon(p, DungeonManager.newDungeon(16, 16, random.nextInt()));
+					DungeonManager.enterDungeon(p, DungeonManager.newDungeon(random.nextInt()));
 				} else if (args.length == 1)
 				{
-					DungeonManager.enterDungeon(p, DungeonManager.newDungeon(16, 16, Integer.parseInt(args[0])));
+					DungeonManager.enterDungeon(p, DungeonManager.newDungeon(Integer.parseInt(args[0])));
 				}
 				return true;
 			}

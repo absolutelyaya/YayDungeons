@@ -21,10 +21,10 @@ public class DungeonManager
 	static HashMap<Player, Dungeoneer> Dungeoneers = new HashMap<>();
 	static HashMap<Player, UUID> pendingJoinRequests = new HashMap<>();
 	
-	public static UUID newDungeon(int sizeX, int sizeY, int seed)
+	public static UUID newDungeon(int seed)
 	{
 		UUID id = UUID.randomUUID();
-		Dungeon d = new Dungeon(id, sizeX, sizeY, seed);
+		Dungeon d = new Dungeon(id, seed);
 		Dungeons.put(id, d);
 		return id;
 	}

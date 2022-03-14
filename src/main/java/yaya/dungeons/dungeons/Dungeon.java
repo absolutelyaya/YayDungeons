@@ -1,10 +1,16 @@
 package yaya.dungeons.dungeons;
 
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
 import com.sk89q.jchronic.utils.Range;
 import com.sk89q.worldedit.EditSession;
 import com.sk89q.worldedit.WorldEdit;
 import com.sk89q.worldedit.WorldEditException;
 import com.sk89q.worldedit.bukkit.BukkitAdapter;
+import com.sk89q.worldedit.bukkit.BukkitCommandSender;
+import com.sk89q.worldedit.bukkit.WorldEditPlugin;
+import com.sk89q.worldedit.extension.input.ParserContext;
 import com.sk89q.worldedit.extent.clipboard.Clipboard;
 import com.sk89q.worldedit.extent.clipboard.io.BuiltInClipboardFormat;
 import com.sk89q.worldedit.extent.clipboard.io.ClipboardReader;
@@ -12,6 +18,7 @@ import com.sk89q.worldedit.function.operation.Operation;
 import com.sk89q.worldedit.function.operation.Operations;
 import com.sk89q.worldedit.math.BlockVector3;
 import com.sk89q.worldedit.math.transform.AffineTransform;
+import com.sk89q.worldedit.regions.Region;
 import com.sk89q.worldedit.session.ClipboardHolder;
 import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.bossbar.BossBar.Color;
@@ -20,14 +27,22 @@ import net.kyori.adventure.text.format.Style;
 import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.title.TitlePart;
+import net.md_5.bungee.chat.ComponentSerializer;
 import org.bukkit.*;
+import org.bukkit.block.Block;
+import org.bukkit.block.Sign;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.event.player.PlayerTeleportEvent;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.util.Vector;
 import yaya.dungeons.YayDungeons;
 
 import java.io.*;
+import java.net.URI;
+import java.net.URL;
+import java.nio.file.*;
 import java.util.*;
 import java.util.logging.Logger;
 import java.util.zip.GZIPInputStream;
@@ -38,7 +53,6 @@ public class Dungeon
 	static Logger logger = null;
 	
 	private final UUID id;
-	private final int sizeX, sizeY;
 	private final List<Player> players = new ArrayList<>();
 	private final List<Player> spectators = new ArrayList<>();
 	private final List<UUID> graveyard = new ArrayList<>();
@@ -47,6 +61,7 @@ public class Dungeon
 	private final int seed;
 	private final Type type;
 	private final List<Modifier> mods = new ArrayList<>();
+	private final Queue<DungeonRoom> roomGenQueue = new ArrayDeque<>();
 	
 	private World world;
 	private BossBar bossBar;
@@ -55,13 +70,11 @@ public class Dungeon
 	private boolean collapsed;
 	private Player leader;
 	
-	public Dungeon(UUID id, int sizeX, int sizeY, int seed)
+	public Dungeon(UUID id, int seed)
 	{
 		if(logger == null)
 			logger = YayDungeons.instance.getLogger();
 		this.id = id;
-		this.sizeX = sizeX;
-		this.sizeY = sizeY;
 		this.seed = seed;
 		random = new Random(seed);
 		//type = Type.values()[random.nextInt(Type.values().length)];
@@ -69,13 +82,11 @@ public class Dungeon
 		logger.info("created dungeon of type " + type);
 		generate();
 	}
-	public Dungeon(UUID id, int sizeX, int sizeY, int seed, Type type)
+	public Dungeon(UUID id, int seed, Type type)
 	{
 		if(logger == null)
 			logger = YayDungeons.instance.getLogger();
 		this.id = id;
-		this.sizeX = sizeX;
-		this.sizeY = sizeY;
 		this.seed = seed;
 		random = new Random(seed);
 		this.type = type;
@@ -95,15 +106,21 @@ public class Dungeon
 									 "\"layers\": [{\"block\": \"air\", \"height\": 1}], \"biome\": \"" + type.biome + "\"}");
 		wc.generateStructures(false);
 		world = wc.createWorld();
-		int error;
-		if((error = placeRoom("Rooms/" + type.name() +"/Entrance.schem", BlockVector3.at(0,63,0), 0, false)) == 0)
-			Bukkit.broadcast(Component.text("Dungeon Generation Complete!"));
-		else
+		roomGenQueue.add(new DungeonRoom(0, BlockVector3.at(0,63,0), BlockVector3.ZERO, "Entrance"));
+		int error = 0;
+		while(roomGenQueue.size() > 0)
 		{
-			Bukkit.broadcast(Component.text("Something went wrong during Dungeon generation. Error Code " + error));
-			logger.warning("Generation of Dungeon " + id + " failed! Error code: " + error);
-			world.getBlockAt(0, 63, 0).setType(Material.GLASS);
+			DungeonRoom room = roomGenQueue.remove();
+			if ((error = placeRoom(getRoomSchem(type, room), room.pos.add(room.offset), room.rot * 90, false)) != 0)
+			{
+				Bukkit.broadcast(Component.text("Something went wrong during Dungeon generation. Error Code " + error));
+				logger.warning("Generation of Dungeon " + id + " failed! Error code: " + error);
+				world.getBlockAt(0, 63, 0).setType(Material.GLASS);
+				break;
+			}
 		}
+		if(error == 0)
+			Bukkit.broadcast(Component.text("Dungeon Generation Complete!"));
 		world.setFullTime(random.nextInt((int)(type.time.getEnd() + 1 - type.time.getBegin())) + type.time.getBegin());
 		world.setStorm(type.storm);
 		world.setThundering(type.thunder);
@@ -199,17 +216,118 @@ public class Dungeon
 		}
 		try (EditSession session = WorldEdit.getInstance().newEditSession(BukkitAdapter.adapt(world)))
 		{
+			Plugin worldEditPlugin = Bukkit.getPluginManager().getPlugin("WorldEdit");
+			if(worldEditPlugin == null)
+				return 4;
+			
 			ClipboardHolder ch = new ClipboardHolder(c);
 			ch.setTransform(new AffineTransform().rotateY(rot));
 			Operation op = ch.createPaste(session).ignoreAirBlocks(true).copyEntities(includeEntities).to(pos).build();
 			Operations.complete(op);
+			
+			ParserContext pc = new ParserContext();
+			pc.setActor(new BukkitCommandSender((WorldEditPlugin)worldEditPlugin, Bukkit.getConsoleSender()));
+			pc.setExtent(session);
+			Region wallRegion = c.getRegion().clone();
+			BlockVector3 dimensions = c.getDimensions();
+			int size = dimensions.getBlockX() + dimensions.getBlockZ();
+			wallRegion.expand(BlockVector3.ZERO.add(size, dimensions.getY(), size));
+			wallRegion.expand(BlockVector3.ZERO.subtract(size, dimensions.getY(), size));
+			wallRegion.shift(pos.subtract(ch.getClipboard().getOrigin()));
+			
+			session.close();
+			
+			for(BlockVector3 b : wallRegion)
+			{
+				Block block = world.getBlockAt(b.getBlockX(), b.getBlockY(), b.getBlockZ());
+				if(block.getType().equals(Material.OAK_SIGN))
+				{
+					if(processSign((Sign)block.getState()))
+						block.setType(Material.STRUCTURE_VOID);
+				}
+			}
 		}
 		catch (WorldEditException e)
 		{
 			e.printStackTrace();
-			return 4;
+			return 5;
 		}
 		return 0;
+	}
+	
+	boolean processSign(Sign sign)
+	{
+		List<String> lines = new ArrayList<>();
+		for(Component comp : sign.lines())
+		{
+			JsonElement e = JsonParser.parseString(ComponentSerializer.toString(comp));
+			if(e.isJsonObject())
+			{
+				String s;
+				if ((s = e.getAsJsonObject().get("content").getAsString()).length() > 0)
+					lines.add(s);
+			}
+		}
+		if(lines.size() == 0)
+			return false;
+		switch(lines.get(0))
+		{
+			case "Room" -> {
+				try
+				{
+					int rot = 2 - (Integer.parseInt(sign.getBlockData().getAsString().split("rotation=|,")[1]) / 4);
+					Location loc = sign.getLocation();
+					Vector dir = ((org.bukkit.block.data.type.Sign)sign.getBlockData()).getRotation().getDirection().multiply(Integer.parseInt(lines.get(1)));
+					if(lines.size() == 4)
+						roomGenQueue.add(new DungeonRoom(rot, BlockVector3.at(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ()),
+								BlockVector3.at(dir.getX(), dir.getY(), dir.getZ()), lines.get(2)));
+					else
+						roomGenQueue.add(new DungeonRoom(rot, BlockVector3.at(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ()),
+								BlockVector3.at(dir.getX(), dir.getY(), dir.getZ())));
+					}
+				catch (Exception e)
+				{
+					logger.info("Error processing sign at " + sign.getLocation() + ":");
+					e.printStackTrace();
+					return false;
+				}
+			}
+			case "Flag" -> {
+				//TODO
+			}
+		}
+		
+		return true;
+	}
+	
+	String getRoomSchem(Type type, DungeonRoom room)
+	{
+		try
+		{
+			List<String> results = new ArrayList<>();
+			ClassLoader cl = Dungeon.class.getClassLoader();
+			URL resource = cl.getResource("Rooms/" + type.name() + "/" + room.roomType);
+			if(resource != null)
+			{
+				Map<String, String> env = new HashMap<>();
+				String[] array = resource.toString().split("!");
+				FileSystem fs = FileSystems.newFileSystem(URI.create(array[0]), env);
+				Path path = fs.getPath(array[1]);
+				for(Path p : Files.walk(path).toList())
+				{
+					if(p.getFileName().toString().endsWith(".schem"))
+						results.add(p.getFileName().toString());
+				}
+				if(fs.isOpen())
+					fs.close();
+				return "Rooms/" + type.name() + "/" + room.roomType + "/" + results.get(random.nextInt(results.size()));
+			}
+		}
+		catch(Exception e)
+		{
+			e.printStackTrace();
+		}
+		return "";
 	}
 	
 	public void CloseDungeon()
@@ -242,6 +360,7 @@ public class Dungeon
 			setLeader(p);
 	}
 	
+	@CanIgnoreReturnValue
 	public boolean Spectate(Player p)
 	{
 		if(players.remove(p))
@@ -493,6 +612,7 @@ public class Dungeon
 				duration);
 	}
 	
+	@SuppressWarnings("unused")
 	public enum Type
 	{
 		Test("the_void", new Range(0, 24000), false, false, Material.WHITE_CONCRETE),
