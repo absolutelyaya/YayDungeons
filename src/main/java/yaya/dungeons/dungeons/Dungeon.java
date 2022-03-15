@@ -40,7 +40,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.util.BlockVector;
 import org.bukkit.util.Vector;
 import yaya.dungeons.YayDungeons;
 
@@ -53,6 +52,7 @@ import java.util.logging.Logger;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
+@SuppressWarnings("unused")
 public class Dungeon
 {
 	static Logger logger = null;
@@ -111,12 +111,12 @@ public class Dungeon
 									 "\"layers\": [{\"block\": \"air\", \"height\": 1}], \"biome\": \"" + type.biome + "\"}");
 		wc.generateStructures(false);
 		world = wc.createWorld();
-		roomGenQueue.add(new DungeonRoom(0, BlockVector3.at(0,63,0), BlockVector3.ZERO, "Entrance"));
+		roomGenQueue.add(new DungeonRoom(0, BlockVector3.at(0,63,0), BlockVector3.ZERO, true, "Entrance"));
 		int error = 0;
 		while(roomGenQueue.size() > 0)
 		{
 			DungeonRoom room = roomGenQueue.remove();
-			if ((error = placeRoom(getRoomSchem(type, room), room.pos.add(room.offset), room.rot * 90, false)) != 0)
+			if ((error = placeRoom(getRoomSchem(type, room), room.pos.add(room.offset), room.rot * 90, room.includeEntities)) != 0)
 			{
 				Bukkit.broadcast(Component.text("Something went wrong during Dungeon generation. Error Code " + error));
 				logger.warning("Generation of Dungeon " + id + " failed! Error code: " + error);
@@ -184,6 +184,7 @@ public class Dungeon
 		savedDungeoneers.put(p, d);
 	}
 	
+	@SuppressWarnings("ConstantConditions")
 	short placeRoom(String room, BlockVector3 pos, double rot, boolean includeEntities)
 	{
 		Clipboard c;
@@ -276,9 +277,7 @@ public class Dungeon
 			JsonElement e = JsonParser.parseString(ComponentSerializer.toString(comp));
 			if(e.isJsonObject())
 			{
-				String s;
-				if ((s = e.getAsJsonObject().get("content").getAsString()).length() > 0)
-					lines.add(s);
+				lines.add(e.getAsJsonObject().get("content").getAsString());
 			}
 		}
 		if(lines.size() == 0)
@@ -292,12 +291,15 @@ public class Dungeon
 					Location loc = sign.getLocation();
 					Vector dir = ((org.bukkit.block.data.type.Sign)sign.getBlockData()).getRotation().getOppositeFace()
 							.getDirection().multiply(Integer.parseInt(lines.get(1)));
-					if(lines.size() == 3)
+					boolean includeEntities = false;
+					if(lines.get(3).length() > 0)
+						includeEntities = lines.get(3).contains("-e");
+					if(lines.get(2).length() > 0)
 						roomGenQueue.add(new DungeonRoom(rot, BlockVector3.at(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ()),
-								BlockVector3.at(dir.getX(), dir.getY(), dir.getZ()), lines.get(2)));
+								BlockVector3.at(dir.getX(), dir.getY(), dir.getZ()), includeEntities, lines.get(2)));
 					else
 						roomGenQueue.add(new DungeonRoom(rot, BlockVector3.at(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ()),
-								BlockVector3.at(dir.getX(), dir.getY(), dir.getZ())));
+								BlockVector3.at(dir.getX(), dir.getY(), dir.getZ()), includeEntities));
 					}
 				catch (Exception e)
 				{
@@ -635,7 +637,6 @@ public class Dungeon
 				duration);
 	}
 	
-	@SuppressWarnings("unused")
 	public enum Type
 	{
 		Test("the_void", new Range(0, 24000), false, false, Material.WHITE_CONCRETE),

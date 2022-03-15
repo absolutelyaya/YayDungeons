@@ -1,5 +1,5 @@
 name: YayDungeons
-version: '${project.version}'
+version: versyon
 main: yaya.dungeons.YayDungeons
 api-version: 1.18
 authors: [ Absolutelyaya ]

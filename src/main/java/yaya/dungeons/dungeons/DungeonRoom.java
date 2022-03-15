@@ -8,17 +8,19 @@ public class DungeonRoom
 	public final BlockVector3 pos;
 	public final BlockVector3 offset;
 	public final String roomType;
+	public final boolean includeEntities;
 	
-	public DungeonRoom(int rot, BlockVector3 pos, BlockVector3 offset)
+	public DungeonRoom(int rot, BlockVector3 pos, BlockVector3 offset, boolean includeEntities)
 	{
-		this(rot, pos, offset, "Room");
+		this(rot, pos, offset, includeEntities, "Room");
 	}
 	
-	public DungeonRoom(int rot, BlockVector3 pos, BlockVector3 offset, String roomType)
+	public DungeonRoom(int rot, BlockVector3 pos, BlockVector3 offset, boolean includeEntities, String roomType)
 	{
 		this.rot = rot;
 		this.pos = pos;
 		this.offset = offset;
 		this.roomType = roomType;
+		this.includeEntities = includeEntities;
 	}
 }
