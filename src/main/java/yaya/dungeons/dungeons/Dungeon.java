@@ -14,12 +14,16 @@ import com.sk89q.worldedit.extension.input.ParserContext;
 import com.sk89q.worldedit.extent.clipboard.Clipboard;
 import com.sk89q.worldedit.extent.clipboard.io.BuiltInClipboardFormat;
 import com.sk89q.worldedit.extent.clipboard.io.ClipboardReader;
+import com.sk89q.worldedit.function.mask.BlockMask;
+import com.sk89q.worldedit.function.mask.Mask;
 import com.sk89q.worldedit.function.operation.Operation;
 import com.sk89q.worldedit.function.operation.Operations;
 import com.sk89q.worldedit.math.BlockVector3;
 import com.sk89q.worldedit.math.transform.AffineTransform;
+import com.sk89q.worldedit.regions.CuboidRegion;
 import com.sk89q.worldedit.regions.Region;
 import com.sk89q.worldedit.session.ClipboardHolder;
+import com.sk89q.worldedit.world.block.BlockTypes;
 import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.bossbar.BossBar.Color;
 import net.kyori.adventure.text.Component;
@@ -36,6 +40,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.util.BlockVector;
 import org.bukkit.util.Vector;
 import yaya.dungeons.YayDungeons;
 
@@ -228,13 +233,21 @@ public class Dungeon
 			ParserContext pc = new ParserContext();
 			pc.setActor(new BukkitCommandSender((WorldEditPlugin)worldEditPlugin, Bukkit.getConsoleSender()));
 			pc.setExtent(session);
+			Mask mask = new BlockMask(session, BlockTypes.AIR.getDefaultState().toBaseBlock(), BlockTypes.GLASS.getDefaultState().toBaseBlock());
+			session.setMask(mask);
 			Region wallRegion = c.getRegion().clone();
-			BlockVector3 dimensions = c.getDimensions();
-			int size = dimensions.getBlockX() + dimensions.getBlockZ();
-			wallRegion.expand(BlockVector3.ZERO.add(size, dimensions.getY(), size));
-			wallRegion.expand(BlockVector3.ZERO.subtract(size, dimensions.getY(), size));
 			wallRegion.shift(pos.subtract(ch.getClipboard().getOrigin()));
+			wallRegion = new CuboidRegion(rotatePointAround(wallRegion.getMinimumPoint(), pos.getX(), pos.getZ(), rot / 90.0 / 2.0),
+					rotatePointAround(wallRegion.getMaximumPoint(), pos.getX(), pos.getZ(), rot / 90.0 / 2.0));
+			Region rotatedRoomRegion = wallRegion.clone();
+			wallRegion.expand(BlockVector3.ONE);
+			wallRegion.expand(BlockVector3.ONE.multiply(-1));
+			session.makeWalls(wallRegion, BlockTypes.GLASS.getDefaultState());
 			
+			Operations.complete(session.commit());
+			rotatedRoomRegion.expand(BlockVector3.at(0, 1, 0));
+			rotatedRoomRegion.expand(BlockVector3.at(0, -1, 0));
+			session.replaceBlocks(rotatedRoomRegion, mask, BlockTypes.STRUCTURE_VOID.getDefaultState().toBaseBlock());
 			session.close();
 			
 			for(BlockVector3 b : wallRegion)
@@ -277,8 +290,9 @@ public class Dungeon
 				{
 					int rot = 2 - (Integer.parseInt(sign.getBlockData().getAsString().split("rotation=|,")[1]) / 4);
 					Location loc = sign.getLocation();
-					Vector dir = ((org.bukkit.block.data.type.Sign)sign.getBlockData()).getRotation().getDirection().multiply(Integer.parseInt(lines.get(1)));
-					if(lines.size() == 4)
+					Vector dir = ((org.bukkit.block.data.type.Sign)sign.getBlockData()).getRotation().getOppositeFace()
+							.getDirection().multiply(Integer.parseInt(lines.get(1)));
+					if(lines.size() == 3)
 						roomGenQueue.add(new DungeonRoom(rot, BlockVector3.at(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ()),
 								BlockVector3.at(dir.getX(), dir.getY(), dir.getZ()), lines.get(2)));
 					else
@@ -328,6 +342,15 @@ public class Dungeon
 			e.printStackTrace();
 		}
 		return "";
+	}
+	
+	private static BlockVector3 rotatePointAround(BlockVector3 point, int centerX, int centerZ, double rot) {
+		double angle = -rot * Math.PI;
+		
+		double rotatedX = Math.cos(angle) * (point.getX() - centerX) - Math.sin(angle) * (point.getZ() - centerZ) + centerX;
+		double rotatedZ = Math.sin(angle) * (point.getX() - centerX) + Math.cos(angle) * (point.getZ() - centerZ) + centerZ;
+		
+		return BlockVector3.at(rotatedX, point.getBlockY(), rotatedZ);
 	}
 	
 	public void CloseDungeon()
