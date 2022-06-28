@@ -136,9 +136,9 @@ public class Dungeon
 				else
 				{
 					roomAttempts = 0;
-					//room.parent.remove();
-					//room.parent.generationAttempts++;
-					//roomGenQueue.add(room.parent);
+					room.parent.remove();
+					room.parent.generationAttempts++;
+					roomGenQueue.add(room.parent);
 					System.out.println("retrying failed");
 				}
 			}
@@ -295,8 +295,8 @@ public class Dungeon
 				Block block = world.getBlockAt(b.getBlockX(), b.getBlockY(), b.getBlockZ());
 				if(block.getType().equals(Material.OAK_SIGN))
 				{
-					processSign((Sign)block.getState(), room);
-					block.setType(Material.STRUCTURE_VOID);
+					if(processSign((Sign)block.getState(), room))
+						block.setType(Material.STRUCTURE_VOID);
 				}
 			}
 		}

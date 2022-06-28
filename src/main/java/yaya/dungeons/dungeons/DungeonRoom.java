@@ -15,6 +15,7 @@ public class DungeonRoom
 	public final boolean includeEntities;
 	public final DungeonRoom parent;
 	public final List<DungeonRoom> children = new ArrayList<>();
+	public final List<DungeonRoom> removedChildren = new ArrayList<>();
 	
 	public int generationAttempts;
 	
@@ -48,9 +49,15 @@ public class DungeonRoom
 		{
 			r.remove();
 		}
+		for (DungeonRoom r : removedChildren)
+		{
+			children.remove(r);
+		}
+		removedChildren.clear();
+		
 		session.undo(session);
 		session.close();
-		parent.children.remove(this);
+		parent.removedChildren.add(this);
 		System.out.println("room removed");
 	}
 	
@@ -61,7 +68,6 @@ public class DungeonRoom
 			child.close();
 		}
 		session.close();
-		System.out.println("room closed");
 	}
 	
 	public void setSession(EditSession session)
