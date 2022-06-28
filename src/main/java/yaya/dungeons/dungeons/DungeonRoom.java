@@ -1,6 +1,10 @@
 package yaya.dungeons.dungeons;
 
+import com.sk89q.worldedit.EditSession;
 import com.sk89q.worldedit.math.BlockVector3;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class DungeonRoom
 {
@@ -9,18 +13,59 @@ public class DungeonRoom
 	public final BlockVector3 offset;
 	public final String roomType;
 	public final boolean includeEntities;
+	public final DungeonRoom parent;
+	public final List<DungeonRoom> children = new ArrayList<>();
 	
-	public DungeonRoom(int rot, BlockVector3 pos, BlockVector3 offset, boolean includeEntities)
+	public int generationAttempts;
+	
+	private EditSession session;
+	
+	public DungeonRoom(DungeonRoom parent, int rot, BlockVector3 pos, BlockVector3 offset, boolean includeEntities)
 	{
-		this(rot, pos, offset, includeEntities, "Room");
+		this(parent, rot, pos, offset, includeEntities, "Room");
 	}
 	
-	public DungeonRoom(int rot, BlockVector3 pos, BlockVector3 offset, boolean includeEntities, String roomType)
+	public DungeonRoom(DungeonRoom parent, int rot, BlockVector3 pos, BlockVector3 offset, boolean includeEntities, String roomType)
 	{
+		this.parent = parent;
 		this.rot = rot;
 		this.pos = pos;
 		this.offset = offset;
 		this.roomType = roomType;
 		this.includeEntities = includeEntities;
+		if(parent != null)
+			parent.addChild(this);
+	}
+	
+	public void addChild(DungeonRoom child)
+	{
+		children.add(child);
+	}
+	
+	public void remove()
+	{
+		for (DungeonRoom r : children)
+		{
+			r.remove();
+		}
+		session.undo(session);
+		session.close();
+		parent.children.remove(this);
+		System.out.println("room removed");
+	}
+	
+	public void close()
+	{
+		for (DungeonRoom child : children)
+		{
+			child.close();
+		}
+		session.close();
+		System.out.println("room closed");
+	}
+	
+	public void setSession(EditSession session)
+	{
+		this.session = session;
 	}
 }

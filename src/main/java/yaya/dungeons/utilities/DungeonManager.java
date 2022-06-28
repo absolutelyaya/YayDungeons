@@ -82,8 +82,6 @@ public class DungeonManager
 				Dungeoneers.put(p, new Dungeoneer(id, p));
 			}
 			p.setGameMode(GameMode.ADVENTURE);
-			p.setAllowFlight(true);
-			p.setFlying(true);
 		}
 	}
 	

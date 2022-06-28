@@ -8,9 +8,6 @@ import com.sk89q.worldedit.EditSession;
 import com.sk89q.worldedit.WorldEdit;
 import com.sk89q.worldedit.WorldEditException;
 import com.sk89q.worldedit.bukkit.BukkitAdapter;
-import com.sk89q.worldedit.bukkit.BukkitCommandSender;
-import com.sk89q.worldedit.bukkit.WorldEditPlugin;
-import com.sk89q.worldedit.extension.input.ParserContext;
 import com.sk89q.worldedit.extent.clipboard.Clipboard;
 import com.sk89q.worldedit.extent.clipboard.io.BuiltInClipboardFormat;
 import com.sk89q.worldedit.extent.clipboard.io.ClipboardReader;
@@ -87,6 +84,7 @@ public class Dungeon
 		logger.info("created dungeon of type " + type);
 		generate();
 	}
+	
 	public Dungeon(UUID id, int seed, Type type)
 	{
 		if(logger == null)
@@ -111,17 +109,43 @@ public class Dungeon
 									 "\"layers\": [{\"block\": \"air\", \"height\": 1}], \"biome\": \"" + type.biome + "\"}");
 		wc.generateStructures(false);
 		world = wc.createWorld();
-		roomGenQueue.add(new DungeonRoom(0, BlockVector3.at(0,63,0), BlockVector3.ZERO, true, "Entrance"));
+		DungeonRoom root = new DungeonRoom(null, 0, BlockVector3.at(0, 63, 0), BlockVector3.ZERO, true, "Entrance");
+		roomGenQueue.add(root);
+		int roomAttempts = 0;
 		int error = 0;
 		while(roomGenQueue.size() > 0)
 		{
+			System.out.println("attempt number " + roomAttempts);
 			DungeonRoom room = roomGenQueue.remove();
-			if ((error = placeRoom(getRoomSchem(type, room), room.pos.add(room.offset), room.rot * 90, room.includeEntities)) != 0)
+			if ((error = placeRoom(room)) > 1)
 			{
 				Bukkit.broadcast(Component.text("Something went wrong during Dungeon generation. Error Code " + error));
 				logger.warning("Generation of Dungeon " + id + " failed! Error code: " + error);
 				world.getBlockAt(0, 63, 0).setType(Material.GLASS);
 				break;
+			}
+			else if(error == 1) //retry
+			{
+				System.out.println("room blocked");
+				roomAttempts++;
+				if(roomAttempts < 3)
+				{
+					roomGenQueue.add(room);
+					System.out.println("retrying");
+				}
+				else
+				{
+					roomAttempts = 0;
+					//room.parent.remove();
+					//room.parent.generationAttempts++;
+					//roomGenQueue.add(room.parent);
+					System.out.println("retrying failed");
+				}
+			}
+			else
+			{
+				roomAttempts = 0;
+				System.out.println("room placed");
 			}
 		}
 		if(error == 0)
@@ -140,7 +164,7 @@ public class Dungeon
 		}
 		
 		logger.info("Generation of Dungeon " + id + " Complete! Thinking of modifiers...");
-		float modChance = random.nextFloat(0.5f);
+		float modChance = 1f; //random.nextFloat(0.5f);
 		for (int attempts = random.nextInt(4); attempts > 0; attempts--)
 		{
 			if(random.nextFloat() < modChance)
@@ -177,6 +201,9 @@ public class Dungeon
 		if(mods.contains(Modifier.Unstable))
 			StartUnstableTimer();
 		logger.info(mods.size() + " Modifiers selected.");
+		
+		//close all rooms editSessions since the dungeon has finished generating.
+		root.close();
 	}
 	
 	public void SaveDungeoneer(Player p, Dungeoneer d)
@@ -185,18 +212,22 @@ public class Dungeon
 	}
 	
 	@SuppressWarnings("ConstantConditions")
-	short placeRoom(String room, BlockVector3 pos, double rot, boolean includeEntities)
+	short placeRoom(DungeonRoom room)
 	{
+		String roomSchem = getRoomSchem(type, room);
+		BlockVector3 pos = room.pos.add(room.offset);
+		double rot = room.rot * 90;
+		boolean includeEntities = room.includeEntities;
 		Clipboard c;
 		GZIPInputStream zipStream;
 		try
 		{
 			File tmp = File.createTempFile("tmp", "schem");
 			GZIPOutputStream zipOut = new GZIPOutputStream(new FileOutputStream(tmp));
-			InputStream inStream = getClass().getClassLoader().getResourceAsStream(room);
+			InputStream inStream = getClass().getClassLoader().getResourceAsStream(roomSchem);
 			int b;
 			if(inStream == null)
-				return 1;
+				return 2;
 			while((b = inStream.read()) != -1)
 			{
 				zipOut.write((byte)b);
@@ -209,7 +240,7 @@ public class Dungeon
 		catch (IOException e)
 		{
 			e.printStackTrace();
-			return 2;
+			return 3;
 		}
 		try (ClipboardReader reader = BuiltInClipboardFormat.SPONGE_SCHEMATIC.getReader(zipStream))
 		{
@@ -218,58 +249,66 @@ public class Dungeon
 		catch(IOException e)
 		{
 			e.printStackTrace();
-			return 3;
+			return 4;
 		}
-		try (EditSession session = WorldEdit.getInstance().newEditSession(BukkitAdapter.adapt(world)))
+		EditSession session = WorldEdit.getInstance().newEditSession(BukkitAdapter.adapt(world));
+		room.setSession(session);
+		try
 		{
 			Plugin worldEditPlugin = Bukkit.getPluginManager().getPlugin("WorldEdit");
 			if(worldEditPlugin == null)
-				return 4;
+				return 5;
 			
 			ClipboardHolder ch = new ClipboardHolder(c);
 			ch.setTransform(new AffineTransform().rotateY(rot));
 			Operation op = ch.createPaste(session).ignoreAirBlocks(true).copyEntities(includeEntities).to(pos).build();
+			
+			Region roomRegion = c.getRegion().clone();
+			roomRegion.shift(pos.subtract(ch.getClipboard().getOrigin()));
+			roomRegion = new CuboidRegion(rotatePointAround(roomRegion.getMinimumPoint(), pos.getX(), pos.getZ(), rot / 180.0),
+				rotatePointAround(roomRegion.getMaximumPoint(), pos.getX(), pos.getZ(), rot / 180.0));
+			if (session.countBlocks(roomRegion, new BlockMask(session, BlockTypes.STRUCTURE_VOID.getDefaultState().toBaseBlock())) > 0)
+			{
+				//session.replaceBlocks(roomRegion, new BlockMask(session, BlockTypes.STRUCTURE_VOID.getDefaultState().toBaseBlock()),
+				//		BlockTypes.RED_STAINED_GLASS.getDefaultState());
+				op.cancel();
+				session.close();
+				return 1; //retry
+			}
 			Operations.complete(op);
 			
-			ParserContext pc = new ParserContext();
-			pc.setActor(new BukkitCommandSender((WorldEditPlugin)worldEditPlugin, Bukkit.getConsoleSender()));
-			pc.setExtent(session);
 			Mask mask = new BlockMask(session, BlockTypes.AIR.getDefaultState().toBaseBlock(), BlockTypes.GLASS.getDefaultState().toBaseBlock());
 			session.setMask(mask);
-			Region wallRegion = c.getRegion().clone();
-			wallRegion.shift(pos.subtract(ch.getClipboard().getOrigin()));
-			wallRegion = new CuboidRegion(rotatePointAround(wallRegion.getMinimumPoint(), pos.getX(), pos.getZ(), rot / 90.0 / 2.0),
-					rotatePointAround(wallRegion.getMaximumPoint(), pos.getX(), pos.getZ(), rot / 90.0 / 2.0));
-			Region rotatedRoomRegion = wallRegion.clone();
+			Region wallRegion = roomRegion.clone();
 			wallRegion.expand(BlockVector3.ONE);
 			wallRegion.expand(BlockVector3.ONE.multiply(-1));
 			session.makeWalls(wallRegion, BlockTypes.GLASS.getDefaultState());
 			
 			Operations.complete(session.commit());
-			rotatedRoomRegion.expand(BlockVector3.at(0, 1, 0));
-			rotatedRoomRegion.expand(BlockVector3.at(0, -1, 0));
-			session.replaceBlocks(rotatedRoomRegion, mask, BlockTypes.STRUCTURE_VOID.getDefaultState().toBaseBlock());
+			roomRegion.expand(BlockVector3.at(0, 1, 0));
+			roomRegion.expand(BlockVector3.at(0, -1, 0));
+			session.replaceBlocks(roomRegion, mask, BlockTypes.STRUCTURE_VOID.getDefaultState().toBaseBlock());
 			session.close();
 			
-			for(BlockVector3 b : wallRegion)
+			for(BlockVector3 b : wallRegion) //get all Signs and process them
 			{
 				Block block = world.getBlockAt(b.getBlockX(), b.getBlockY(), b.getBlockZ());
 				if(block.getType().equals(Material.OAK_SIGN))
 				{
-					if(processSign((Sign)block.getState()))
-						block.setType(Material.STRUCTURE_VOID);
+					processSign((Sign)block.getState(), room);
+					block.setType(Material.STRUCTURE_VOID);
 				}
 			}
 		}
 		catch (WorldEditException e)
 		{
 			e.printStackTrace();
-			return 5;
+			return 6;
 		}
 		return 0;
 	}
 	
-	boolean processSign(Sign sign)
+	boolean processSign(Sign sign, DungeonRoom room)
 	{
 		List<String> lines = new ArrayList<>();
 		for(Component comp : sign.lines())
@@ -295,10 +334,10 @@ public class Dungeon
 					if(lines.get(3).length() > 0)
 						includeEntities = lines.get(3).contains("-e");
 					if(lines.get(2).length() > 0)
-						roomGenQueue.add(new DungeonRoom(rot, BlockVector3.at(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ()),
+						roomGenQueue.add(new DungeonRoom(room, rot, BlockVector3.at(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ()),
 								BlockVector3.at(dir.getX(), dir.getY(), dir.getZ()), includeEntities, lines.get(2)));
 					else
-						roomGenQueue.add(new DungeonRoom(rot, BlockVector3.at(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ()),
+						roomGenQueue.add(new DungeonRoom(room, rot, BlockVector3.at(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ()),
 								BlockVector3.at(dir.getX(), dir.getY(), dir.getZ()), includeEntities));
 					}
 				catch (Exception e)
@@ -426,6 +465,7 @@ public class Dungeon
 				@Override
 				public void run()
 				{
+					p.resetTitle();
 					p.sendTitlePart(TitlePart.TITLE, m.title);
 					p.sendTitlePart(TitlePart.SUBTITLE, m.description);
 					p.playSound(p, m.sound, 2f, 0.5f);
@@ -543,7 +583,7 @@ public class Dungeon
 	void setLeader(Player p)
 	{
 		leader = p;
-		world.sendMessage(Component.text(ChatColor.GOLD + p.getName() + ChatColor.YELLOW + " is now the Dungeon Raids Leader!"));
+		world.sendMessage(Component.text(ChatColor.GOLD + p.getName() + ChatColor.YELLOW + " is now the Dungeon Explorations Leader!"));
 	}
 	
 	public void addToGraveyard(Player p)
