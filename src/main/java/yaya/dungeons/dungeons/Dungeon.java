@@ -20,6 +20,7 @@ import com.sk89q.worldedit.math.transform.AffineTransform;
 import com.sk89q.worldedit.regions.CuboidRegion;
 import com.sk89q.worldedit.regions.Region;
 import com.sk89q.worldedit.session.ClipboardHolder;
+import com.sk89q.worldedit.world.block.BlockState;
 import com.sk89q.worldedit.world.block.BlockTypes;
 import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.bossbar.BossBar.Color;
@@ -60,7 +61,7 @@ public class Dungeon
 	private final List<UUID> graveyard = new ArrayList<>();
 	private final HashMap<Player, Dungeoneer> savedDungeoneers = new HashMap<>();
 	private final Random random;
-	private final int seed;
+	private final int seed, wantedDepth;
 	private final Type type;
 	private final List<Modifier> mods = new ArrayList<>();
 	private final Queue<DungeonRoom> roomGenQueue = new ArrayDeque<>();
@@ -71,18 +72,12 @@ public class Dungeon
 	private int unstableCountdownID = -1;
 	private boolean collapsed;
 	private Player leader;
+	@SuppressWarnings("ConstantConditions")
+	private BlockState BorderMaterial = BlockTypes.GLASS.getDefaultState();
 	
 	public Dungeon(UUID id, int seed)
 	{
-		if(logger == null)
-			logger = YayDungeons.instance.getLogger();
-		this.id = id;
-		this.seed = seed;
-		random = new Random(seed);
-		//type = Type.values()[random.nextInt(Type.values().length)];
-		type = Type.Test; //I just want to get one type working for now.
-		logger.info("created dungeon of type " + type);
-		generate();
+		this(id, seed, Type.Test);
 	}
 	
 	public Dungeon(UUID id, int seed, Type type)
@@ -94,9 +89,13 @@ public class Dungeon
 		random = new Random(seed);
 		this.type = type;
 		logger.info(String.valueOf(type));
+		wantedDepth = 15; //TODO: Add dungeon Size Parameter
 		generate();
 	}
 	
+	//TODO: Fix border removal issue
+	// (sometimes borders aren't cleaned up correctly after undoing a room placement, which can block off rooms entirely)
+	//TODO: Security features to ensure instances getting destroyed.
 	void generate()
 	{
 		logger.info("Starting generation of Dungeon " + id);
@@ -115,7 +114,7 @@ public class Dungeon
 		int error = 0;
 		while(roomGenQueue.size() > 0)
 		{
-			System.out.println("attempt number " + roomAttempts);
+			//System.out.println("attempt number " + roomAttempts);
 			DungeonRoom room = roomGenQueue.remove();
 			if ((error = placeRoom(room)) > 1)
 			{
@@ -126,26 +125,26 @@ public class Dungeon
 			}
 			else if(error == 1) //retry
 			{
-				System.out.println("room blocked");
+				//System.out.println("room blocked");
 				roomAttempts++;
 				if(roomAttempts < 3)
 				{
 					roomGenQueue.add(room);
-					System.out.println("retrying");
+					//System.out.println("retrying");
 				}
 				else
 				{
 					roomAttempts = 0;
-					room.parent.remove();
+					room.parent.remove(this);
 					room.parent.generationAttempts++;
 					roomGenQueue.add(room.parent);
-					System.out.println("retrying failed");
+					//System.out.println("retrying failed");
 				}
 			}
 			else
 			{
 				roomAttempts = 0;
-				System.out.println("room placed");
+				//System.out.println("room placed");
 			}
 		}
 		if(error == 0)
@@ -215,6 +214,8 @@ public class Dungeon
 	short placeRoom(DungeonRoom room)
 	{
 		String roomSchem = getRoomSchem(type, room);
+		if(roomSchem.equals(""))
+			return 1;
 		BlockVector3 pos = room.pos.add(room.offset);
 		double rot = room.rot * 90;
 		boolean includeEntities = room.includeEntities;
@@ -267,7 +268,9 @@ public class Dungeon
 			roomRegion.shift(pos.subtract(ch.getClipboard().getOrigin()));
 			roomRegion = new CuboidRegion(rotatePointAround(roomRegion.getMinimumPoint(), pos.getX(), pos.getZ(), rot / 180.0),
 				rotatePointAround(roomRegion.getMaximumPoint(), pos.getX(), pos.getZ(), rot / 180.0));
-			if (session.countBlocks(roomRegion, new BlockMask(session, BlockTypes.STRUCTURE_VOID.getDefaultState().toBaseBlock())) > 0)
+			if (session.countBlocks(roomRegion,
+					new BlockMask(session,
+							BlockTypes.STRUCTURE_VOID.getDefaultState().toBaseBlock())) > 0)
 			{
 				//session.replaceBlocks(roomRegion, new BlockMask(session, BlockTypes.STRUCTURE_VOID.getDefaultState().toBaseBlock()),
 				//		BlockTypes.RED_STAINED_GLASS.getDefaultState());
@@ -277,12 +280,12 @@ public class Dungeon
 			}
 			Operations.complete(op);
 			
-			Mask mask = new BlockMask(session, BlockTypes.AIR.getDefaultState().toBaseBlock(), BlockTypes.GLASS.getDefaultState().toBaseBlock());
+			Mask mask = new BlockMask(session, BlockTypes.AIR.getDefaultState().toBaseBlock(), BorderMaterial.toBaseBlock());
 			session.setMask(mask);
 			Region wallRegion = roomRegion.clone();
 			wallRegion.expand(BlockVector3.ONE);
 			wallRegion.expand(BlockVector3.ONE.multiply(-1));
-			session.makeWalls(wallRegion, BlockTypes.GLASS.getDefaultState());
+			session.makeWalls(wallRegion, BorderMaterial);
 			
 			Operations.complete(session.commit());
 			roomRegion.expand(BlockVector3.at(0, 1, 0));
@@ -308,7 +311,12 @@ public class Dungeon
 		return 0;
 	}
 	
-	boolean processSign(Sign sign, DungeonRoom room)
+	public void removeRoom(DungeonRoom room)
+	{
+		roomGenQueue.remove(room);
+	}
+	
+	boolean processSign(Sign sign, DungeonRoom owner)
 	{
 		List<String> lines = new ArrayList<>();
 		for(Component comp : sign.lines())
@@ -333,13 +341,15 @@ public class Dungeon
 					boolean includeEntities = false;
 					if(lines.get(3).length() > 0)
 						includeEntities = lines.get(3).contains("-e");
+					String roomType = "Room";
 					if(lines.get(2).length() > 0)
-						roomGenQueue.add(new DungeonRoom(room, rot, BlockVector3.at(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ()),
-								BlockVector3.at(dir.getX(), dir.getY(), dir.getZ()), includeEntities, lines.get(2)));
-					else
-						roomGenQueue.add(new DungeonRoom(room, rot, BlockVector3.at(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ()),
-								BlockVector3.at(dir.getX(), dir.getY(), dir.getZ()), includeEntities));
-					}
+						roomType = lines.get(2);
+					if(owner.depth >= wantedDepth - 1)
+						roomType += "/Dend";
+					
+					roomGenQueue.add(new DungeonRoom(owner, rot, BlockVector3.at(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ()),
+							BlockVector3.at(dir.getX(), dir.getY(), dir.getZ()), includeEntities, roomType));
+				}
 				catch (Exception e)
 				{
 					logger.info("Error processing sign at " + sign.getLocation() + ":");
@@ -368,14 +378,22 @@ public class Dungeon
 				String[] array = resource.toString().split("!");
 				FileSystem fs = FileSystems.newFileSystem(URI.create(array[0]), env);
 				Path path = fs.getPath(array[1]);
-				for(Path p : Files.walk(path).toList())
+				for(Path p : Files.walk(path, 1).toList())
 				{
-					if(p.getFileName().toString().endsWith(".schem"))
+					String fileName = p.getFileName().toString();
+					if(fileName.endsWith(".schem") && !room.attemptedSchems.contains(fileName))
 						results.add(p.getFileName().toString());
 				}
 				if(fs.isOpen())
 					fs.close();
-				return "Rooms/" + type.name() + "/" + room.roomType + "/" + results.get(random.nextInt(results.size()));
+				if(results.size() > 0)
+				{
+					String result = results.get(random.nextInt(results.size()));
+					room.attemptedSchems.add(result);
+					return "Rooms/" + type.name() + "/" + room.roomType + "/" + result;
+				}
+				else
+					return "";
 			}
 		}
 		catch(Exception e)
@@ -648,7 +666,7 @@ public class Dungeon
 			{
 				UnstableCollapse();
 			}
-		}, 0L, 4L);
+		}, 0L, 20L);
 	}
 	
 	void UnstableCollapse()
@@ -661,6 +679,7 @@ public class Dungeon
 		}
 	}
 	
+	//TODO: Find a solution so players don't freeze during screenshake
 	void UnstableScreenshake(float severity, long duration)
 	{
 		Random shaker = new Random();
@@ -677,6 +696,7 @@ public class Dungeon
 				duration);
 	}
 	
+	//TODO: Make this data driven. Probably using Config Files.
 	public enum Type
 	{
 		Test("the_void", new Range(0, 24000), false, false, Material.WHITE_CONCRETE),
@@ -722,6 +742,8 @@ public class Dungeon
 						.append(Component.text("#")),
 				Component.text(ChatColor.RED + "This Dungeon will collapse in 15 minutes!"), Keeping);
 		
+		//TODO: Add Big Modifier (multiply size by 1.5)
+		//TODO: Add Enormous Modifier (multiply size by 2)
 		//TODO: Functionality of Evil, Generous and Full
 		
 		public final int weight;

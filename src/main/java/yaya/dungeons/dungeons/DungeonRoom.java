@@ -8,7 +8,7 @@ import java.util.List;
 
 public class DungeonRoom
 {
-	public final int rot;
+	public final int rot, depth;
 	public final BlockVector3 pos;
 	public final BlockVector3 offset;
 	public final String roomType;
@@ -16,6 +16,7 @@ public class DungeonRoom
 	public final DungeonRoom parent;
 	public final List<DungeonRoom> children = new ArrayList<>();
 	public final List<DungeonRoom> removedChildren = new ArrayList<>();
+	public final List<String> attemptedSchems = new ArrayList<>();
 	
 	public int generationAttempts;
 	
@@ -35,7 +36,12 @@ public class DungeonRoom
 		this.roomType = roomType;
 		this.includeEntities = includeEntities;
 		if(parent != null)
+		{
 			parent.addChild(this);
+			depth = parent.depth + 1;
+		}
+		else
+			depth = 0;
 	}
 	
 	public void addChild(DungeonRoom child)
@@ -43,11 +49,11 @@ public class DungeonRoom
 		children.add(child);
 	}
 	
-	public void remove()
+	public void remove(Dungeon owner)
 	{
 		for (DungeonRoom r : children)
 		{
-			r.remove();
+			r.remove(owner);
 		}
 		for (DungeonRoom r : removedChildren)
 		{
@@ -55,10 +61,14 @@ public class DungeonRoom
 		}
 		removedChildren.clear();
 		
-		session.undo(session);
-		session.close();
+		if(session != null)
+		{
+			session.undo(session);
+			session.close();
+		}
 		parent.removedChildren.add(this);
-		System.out.println("room removed");
+		owner.removeRoom(this);
+		//System.out.println("room removed");
 	}
 	
 	public void close()
@@ -67,7 +77,8 @@ public class DungeonRoom
 		{
 			child.close();
 		}
-		session.close();
+		if(session != null)
+			session.close();
 	}
 	
 	public void setSession(EditSession session)
