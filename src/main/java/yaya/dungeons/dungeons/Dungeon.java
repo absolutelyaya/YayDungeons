@@ -59,10 +59,11 @@ public class Dungeon
 	private final List<Player> players = new ArrayList<>();
 	private final List<Player> spectators = new ArrayList<>();
 	private final List<UUID> graveyard = new ArrayList<>();
-	private final HashMap<Player, Dungeoneer> savedDungeoneers = new HashMap<>();
+	private final Map<Player, Dungeoneer> savedDungeoneers = new HashMap<>();
 	private final Random random;
 	private final int seed, wantedDepth;
 	private final Type type;
+	private final Map<String, Map<String, Clipboard>> roomSchemCache = new HashMap<>();
 	private final List<Modifier> mods = new ArrayList<>();
 	private final Queue<DungeonRoom> roomGenQueue = new ArrayDeque<>();
 	@SuppressWarnings("ConstantConditions")
@@ -218,6 +219,9 @@ public class Dungeon
 		
 		//close all rooms editSessions since the dungeon has finished generating.
 		root.close();
+		
+		//clear cache
+		roomSchemCache.clear();
 	}
 	
 	public void SaveDungeoneer(Player p, Dungeoneer d)
@@ -234,39 +238,9 @@ public class Dungeon
 		BlockVector3 pos = room.pos.add(room.offset);
 		double rot = room.rot * 90;
 		boolean includeEntities = room.includeEntities;
-		Clipboard c;
-		GZIPInputStream zipStream;
-		try
-		{
-			File tmp = File.createTempFile("tmp", "schem");
-			GZIPOutputStream zipOut = new GZIPOutputStream(new FileOutputStream(tmp));
-			InputStream inStream = getClass().getClassLoader().getResourceAsStream(roomSchem);
-			int b;
-			if(inStream == null)
-				return 2;
-			while((b = inStream.read()) != -1)
-			{
-				zipOut.write((byte)b);
-			}
-			zipOut.finish();
-			zipOut.close();
-			zipStream = new GZIPInputStream(new FileInputStream(tmp));
-			tmp.delete();
-		}
-		catch (IOException e)
-		{
-			e.printStackTrace();
-			return 3;
-		}
-		try (ClipboardReader reader = BuiltInClipboardFormat.SPONGE_SCHEMATIC.getReader(zipStream))
-		{
-			c = reader.read();
-		}
-		catch(IOException e)
-		{
-			e.printStackTrace();
-			return 4;
-		}
+		
+		Clipboard c = roomSchemCache.get(room.roomType).get(roomSchem);
+		
 		EditSession session = WorldEdit.getInstance().newEditSession(BukkitAdapter.adapt(world));
 		room.setSession(session);
 		try
@@ -328,6 +302,44 @@ public class Dungeon
 		return 0;
 	}
 	
+	Clipboard loadClipboard(String fileName)
+	{
+		Clipboard c;
+		GZIPInputStream zipStream;
+		try
+		{
+			File tmp = File.createTempFile("tmp", "schem");
+			GZIPOutputStream zipOut = new GZIPOutputStream(new FileOutputStream(tmp));
+			InputStream inStream = getClass().getClassLoader().getResourceAsStream(fileName);
+			int b;
+			if(inStream == null)
+				return null;
+			while((b = inStream.read()) != -1)
+			{
+				zipOut.write((byte)b);
+			}
+			zipOut.finish();
+			zipOut.close();
+			zipStream = new GZIPInputStream(new FileInputStream(tmp));
+			tmp.delete();
+		}
+		catch (IOException e)
+		{
+			e.printStackTrace();
+			return null;
+		}
+		try (ClipboardReader reader = BuiltInClipboardFormat.SPONGE_SCHEMATIC.getReader(zipStream))
+		{
+			c = reader.read();
+		}
+		catch(IOException e)
+		{
+			e.printStackTrace();
+			return null;
+		}
+		return c;
+	}
+	
 	public void removeRoom(DungeonRoom room)
 	{
 		roomGenQueue.remove(room);
@@ -384,40 +396,53 @@ public class Dungeon
 	
 	String getRoomSchem(Type type, DungeonRoom room)
 	{
-		try
+		if(!roomSchemCache.containsKey(room.roomType))
 		{
-			List<String> results = new ArrayList<>();
-			ClassLoader cl = Dungeon.class.getClassLoader();
-			URL resource = cl.getResource("Rooms/" + type.name() + "/" + room.roomType);
-			if(resource != null)
+			try
 			{
-				Map<String, String> env = new HashMap<>();
-				String[] array = resource.toString().split("!");
-				FileSystem fs = FileSystems.newFileSystem(URI.create(array[0]), env);
-				Path path = fs.getPath(array[1]);
-				for(Path p : Files.walk(path, 1).toList())
+				ClassLoader cl = Dungeon.class.getClassLoader();
+				URL resource = cl.getResource("Rooms/" + type.name() + "/" + room.roomType);
+				if(resource != null)
 				{
-					String fileName = p.getFileName().toString();
-					if(fileName.endsWith(".schem") && !room.attemptedSchems.contains(fileName))
-						results.add(p.getFileName().toString());
+					Map<String, String> env = new HashMap<>();
+					String[] array = resource.toString().split("!");
+					FileSystem fs = FileSystems.newFileSystem(URI.create(array[0]), env);
+					Path path = fs.getPath(array[1]);
+					Map<String, Clipboard> map = new HashMap<>();
+					for(Path p : Files.walk(path, 1).toList())
+					{
+						String fileName = p.getFileName().toString();
+						if(fileName.endsWith(".schem"))
+							map.put(fileName,
+									loadClipboard("Rooms/" + type.name() + "/" + room.roomType + "/" + fileName));
+					}
+					roomSchemCache.put(room.roomType, map);
+					if(fs.isOpen())
+						fs.close();
 				}
-				if(fs.isOpen())
-					fs.close();
-				if(results.size() > 0)
-				{
-					String result = results.get(random.nextInt(results.size()));
-					room.attemptedSchems.add(result);
-					return "Rooms/" + type.name() + "/" + room.roomType + "/" + result;
-				}
-				else
-					return "";
+			}
+			catch(Exception e)
+			{
+				e.printStackTrace();
 			}
 		}
-		catch(Exception e)
+		
+		List<String> results = new ArrayList<>();
+		for (String key : roomSchemCache.get(room.roomType).keySet())
 		{
-			e.printStackTrace();
+			if(!room.attemptedSchems.contains(key))
+			{
+				results.add(key);
+			}
 		}
-		return "";
+		if(results.size() > 0)
+		{
+			String result = results.get(random.nextInt(results.size()));
+			room.attemptedSchems.add(result);
+			return result;
+		}
+		else
+			return "";
 	}
 	
 	private static BlockVector3 rotatePointAround(BlockVector3 point, int centerX, int centerZ, double rot) {
@@ -595,7 +620,7 @@ public class Dungeon
 		return type;
 	}
 	
-	public HashMap<Player, Dungeoneer> getSavedDungeoneers()
+	public Map<Player, Dungeoneer> getSavedDungeoneers()
 	{
 		return savedDungeoneers;
 	}
