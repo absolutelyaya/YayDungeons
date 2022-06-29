@@ -757,7 +757,11 @@ public class Dungeon
 				Component.text("#").style(Style.style(TextColor.color(0x9E0484), TextDecoration.OBFUSCATED))
 						.append(Component.text(" Unstable ").style(Style.empty().decoration(TextDecoration.OBFUSCATED, false)))
 						.append(Component.text("#")),
-				Component.text(ChatColor.RED + "This Dungeon will collapse in 15 minutes!"), Keeping);
+				Component.text(ChatColor.RED + "This Dungeon will collapse in 15 minutes!"), Keeping),
+		Big(3, 1, Color.GREEN, Sound.BLOCK_CHORUS_FLOWER_GROW, Component.text(ChatColor.GREEN + "Big"),
+				Component.text("This place is bigger than usual...")),
+		Enormous(1, 2, Color.GREEN, Sound.AMBIENT_BASALT_DELTAS_ADDITIONS,
+				Component.text(ChatColor.DARK_GREEN + "Enormous"), Component.text("Don't get lost!"), Big);
 		
 		//TODO: Add Big Modifier (multiply size by 1.5)
 		//TODO: Add Enormous Modifier (multiply size by 2)
@@ -789,6 +793,7 @@ public class Dungeon
 			{
 				exceptions.addAll(Arrays.stream(m.conflicts).toList());
 			}
+			exceptions.addAll(YayDungeons.instance.dungeonConfig.getDisabledMods());
 			for(Modifier m : Modifier.values())
 			{
 				if(!exceptions.contains(m))

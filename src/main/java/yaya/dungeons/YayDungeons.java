@@ -162,5 +162,17 @@ public final class YayDungeons extends JavaPlugin
 	public static class ConfigData
 	{
 		public Map<String, DungeonSize> Sizes;
+		public Map<String, Boolean> Modifiers;
+		
+		public List<Dungeon.Modifier> getDisabledMods()
+		{
+			List<Dungeon.Modifier> result = new ArrayList<>();
+			for (String key : Modifiers.keySet())
+			{
+				if(!Modifiers.get(key))
+					result.add(Enum.valueOf(Dungeon.Modifier.class, key));
+			}
+			return result;
+		}
 	}
 }

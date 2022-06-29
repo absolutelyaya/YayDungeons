@@ -21,5 +21,16 @@
       "weight": 2
     }
   },
+  "Modifiers": {
+    "Gripping": true,
+    "Keeping": true,
+    "Evil": true,
+    "Locked": true,
+    "Generous": true,
+    "Full": true,
+    "Unstable": true,
+    "Big": true,
+    "Enormous": true
+  },
   "TODO": "Add dungeon types to config"
 }
