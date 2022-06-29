@@ -65,6 +65,8 @@ public class Dungeon
 	private final Type type;
 	private final List<Modifier> mods = new ArrayList<>();
 	private final Queue<DungeonRoom> roomGenQueue = new ArrayDeque<>();
+	@SuppressWarnings("ConstantConditions")
+	private final BlockState BorderMaterial = BlockTypes.GLASS.getDefaultState();
 	
 	private World world;
 	private BossBar bossBar;
@@ -72,8 +74,7 @@ public class Dungeon
 	private int unstableCountdownID = -1;
 	private boolean collapsed;
 	private Player leader;
-	@SuppressWarnings("ConstantConditions")
-	private BlockState BorderMaterial = BlockTypes.GLASS.getDefaultState();
+	private String size;
 	
 	public Dungeon(UUID id, int seed)
 	{
@@ -89,8 +90,21 @@ public class Dungeon
 		random = new Random(seed);
 		this.type = type;
 		logger.info(String.valueOf(type));
-		wantedDepth = 15; //TODO: Add dungeon Size Parameter
+		wantedDepth = randomSize();
 		generate();
+	}
+	
+	int randomSize()
+	{
+		Map<String, DungeonSize> sizes = YayDungeons.instance.dungeonConfig.Sizes;
+		List<String> weightedSizes = new ArrayList<>();
+		for (String key : sizes.keySet())
+		{
+			for (int i = 0; i < sizes.get(key).weight; i++)
+				weightedSizes.add(key);
+		}
+		size = weightedSizes.get(random.nextInt(weightedSizes.size()));
+		return random.nextInt(sizes.get(size).min, sizes.get(size).max);
 	}
 	
 	//TODO: Fix border removal issue
@@ -99,7 +113,8 @@ public class Dungeon
 	void generate()
 	{
 		logger.info("Starting generation of Dungeon " + id);
-		Bukkit.broadcast(Component.text("Generating a dungeon..."));
+		logger.info("- Size: " + size + " | wanted depth: " + wantedDepth);
+		Bukkit.broadcast(Component.text("Generating a " + size + " dungeon..."));
 		String name;
 		WorldCreator wc = new WorldCreator(name = "Dungeon-" + type.name() + "." + id.toString());
 		bossBar = BossBar.bossBar(Component.text(name), 1f, BossBar.Color.WHITE, BossBar.Overlay.PROGRESS);
@@ -285,7 +300,9 @@ public class Dungeon
 			Region wallRegion = roomRegion.clone();
 			wallRegion.expand(BlockVector3.ONE);
 			wallRegion.expand(BlockVector3.ONE.multiply(-1));
-			session.makeWalls(wallRegion, BorderMaterial);
+			boolean border = false;
+			if(border)
+				session.makeWalls(wallRegion, BorderMaterial);
 			
 			Operations.complete(session.commit());
 			roomRegion.expand(BlockVector3.at(0, 1, 0));

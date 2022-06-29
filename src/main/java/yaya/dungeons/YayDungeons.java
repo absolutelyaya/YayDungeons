@@ -1,5 +1,7 @@
 package yaya.dungeons;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -8,17 +10,24 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import yaya.dungeons.dungeons.Dungeon;
+import yaya.dungeons.dungeons.DungeonSize;
 import yaya.dungeons.listeners.*;
 import yaya.dungeons.menus.DungeonBrowserMenu;
 import yaya.dungeons.utilities.DungeonManager;
 
-import java.util.Objects;
-import java.util.Random;
-import java.util.UUID;
+import java.io.File;
+import java.io.FileReader;
+import java.io.IOException;
+import java.util.*;
 
 public final class YayDungeons extends JavaPlugin
 {
 	public static YayDungeons instance;
+	
+	public final Gson gson = new GsonBuilder().setPrettyPrinting().create();
+	public ConfigData dungeonConfig;
+	
+	File dungeonConfigFile = new File(getDataFolder(), "dungeonConfig.json");
 	Random random;
 	
 	@Override
@@ -26,6 +35,13 @@ public final class YayDungeons extends JavaPlugin
 	{
 		instance = this;
 		random = new Random();
+		
+		if(!dungeonConfigFile.exists())
+		{
+			dungeonConfigFile.getParentFile().mkdirs();
+			saveResource(dungeonConfigFile.getName(), false);
+		}
+		loadConfig();
 		
 		try
 		{
@@ -38,6 +54,18 @@ public final class YayDungeons extends JavaPlugin
 		
 		registerListeners();
 		registerCommands();
+	}
+	
+	private void loadConfig()
+	{
+		try
+		{
+			dungeonConfig = gson.fromJson(new FileReader(dungeonConfigFile), ConfigData.class);
+		}
+		catch (IOException e)
+		{
+			e.printStackTrace();
+		}
 	}
 	
 	@Override
@@ -129,5 +157,10 @@ public final class YayDungeons extends JavaPlugin
 			}
 		}
 		return false;
+	}
+	
+	public static class ConfigData
+	{
+		public Map<String, DungeonSize> Sizes;
 	}
 }

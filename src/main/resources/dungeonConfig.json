@@ -1,0 +1,25 @@
+{
+  "Sizes": {
+    "Small": {
+      "min": 8,
+      "max": 15,
+      "weight": 3
+    },
+    "Medium": {
+      "min": 13,
+      "max": 20,
+      "weight": 6
+    },
+    "Big": {
+      "min": 18,
+      "max": 26,
+      "weight": 4
+    },
+    "Huge": {
+      "min": 20,
+      "max": 34,
+      "weight": 2
+    }
+  },
+  "TODO": "Add dungeon types to config"
+}
